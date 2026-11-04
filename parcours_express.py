@@ -57,35 +57,6 @@ def render_tax_cards(lignes):
             )
 
 
-def render_detail_table(lignes):
-    rows = []
-    for r in lignes:
-        rows.append(
-            f'''<tr>
-            <td>{_html(r['taxe'])}</td>
-            <td class="num">{_html(pct(r['abattement_pct']))}</td>
-            <td class="num">{_html(euro(r['base_taxable']))}</td>
-            <td class="num">{_html(pct(r['taux_pct']))}</td>
-            <td class="num strong">{_html(euro(r['montant']))}</td>
-        </tr>'''
-        )
-    st.markdown(
-        '''<div class="tf-table-wrap">
-        <table class="tf-detail-table">
-            <thead>
-                <tr>
-                    <th>Composante</th>
-                    <th class="num">Exonération</th>
-                    <th class="num">Base</th>
-                    <th class="num">Taux</th>
-                    <th class="num">Montant</th>
-                </tr>
-            </thead>
-            <tbody>''' + ''.join(rows) + '''</tbody>
-        </table>
-    </div>''',
-        unsafe_allow_html=True,
-    )
 
 def normaliser_identite(parcelle, adresse, ref):
     code = str(parcelle.get('insee') or adresse.get('insee') or '')
@@ -217,13 +188,13 @@ with st.form('saisie_unique',border=True):
     for i,(k,v) in enumerate(labels.items()):
         with cols[i%3]:
             surfaces[k]=st.number_input(v,min_value=0.0,max_value=1_000_000.0,step=1.0,key='express_'+k)
-    annee=st.selectbox('Année d’imposition',list(range(2026,2016,-1)),index=0)
+    annee=int(st.number_input('Année d’imposition', min_value=2017, value=2026, step=1, format='%d', help='Vous pouvez choisir une année future. Une estimation n’est calculée que si les données fiscales correspondantes sont disponibles.'))
     construction_nouvelle=st.checkbox('Construction nouvelle, reconstruction ou addition de construction (hors habitation)', value=False,
-        help='Exonération temporaire de 40 % de la part communale de taxe foncière, pour les deux années suivant celle de l’achèvement, sous conditions.')
+        help='Exonération temporaire de 40 % de la part communale et des taxes additionnelles éligibles (GEMAPI, TSE et syndicats sans fiscalité propre), sous conditions.')
     annee_achevement=None
     if construction_nouvelle:
         annee_achevement=st.number_input('Année d’achèvement des travaux',min_value=1900,max_value=annee, value=max(1900,annee-1),step=1)
-        st.caption('L’exonération suppose notamment une déclaration dans les 90 jours. Elle ne s’applique pas à l’EPCI ni à la TEOM.')
+        st.caption('Sous réserve de déclaration dans les 90 jours : 40 % pour la commune, les syndicats sans fiscalité propre, la TSE et la GEMAPI ; pas pour l’EPCI à fiscalité propre ni la TEOM.')
     run=st.form_submit_button('Calculer mon estimation',type='primary',use_container_width=True)
 
 if run:
@@ -288,14 +259,12 @@ if calcule:
         st.metric('Montant estimé des taxes, hors frais de gestion',euro(result['total_estime']))
         exo = analyse.get('exoneration_neuf', {})
         if exo.get('active'):
-            st.caption(f"Construction achevée en {exo['annee_achevement']} : exonération de 40 % appliquée uniquement à la part communale (sous réserve des conditions déclaratives).")
+            st.caption(f"Construction achevée en {exo['annee_achevement']} : exonération de 40 % appliquée à la part communale et aux taxes additionnelles éligibles (hors EPCI à fiscalité propre et TEOM), sous réserve des conditions déclaratives.")
         else:
             st.caption('Estimation de base sans autres exonérations particulières ni corrections historiques non fournies ; frais de gestion non inclus.')
         if exo.get('a_verifier') and not exo.get('active'):
             st.caption('Construction nouvelle : régime antérieur à 2021 à vérifier selon l’année simulée.')
         render_tax_cards(result['lignes'])
-        st.markdown('**Détail du calcul**')
-        render_detail_table(result['lignes'])
     else:
         st.info('La valeur locative peut être estimée, mais une cotisation complète ne peut pas être établie sans inventer certains paramètres officiels.')
         if partial['valeur_locative_brute'] is not None:
