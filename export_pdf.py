@@ -46,6 +46,10 @@ def creer_pdf_estimation(dossier):
              Paragraph(f"<b>Année :</b> {_texte(dossier['annee'])} &nbsp;&nbsp; <b>Catégorie :</b> {_texte(dossier['categorie'])}", styles['CorpsTF']),
              Paragraph(f"<b>Parcelle :</b> {_texte(bien.get('section',''))} {_texte(bien.get('numero',''))} "
                        f"(INSEE cadastral {_texte(bien.get('code_insee',''))})", styles['CorpsTF'])]
+    exo = analyse.get('exoneration_neuf', {})
+    if dossier.get('construction_nouvelle'):
+        story.append(Paragraph('<b>Construction nouvelle :</b> oui ; année d’achèvement : '+_texte(dossier.get('annee_achevement')), styles['CorpsTF']))
+        story.append(Paragraph('Exonération de 40 % sur la part communale : '+('appliquée' if exo.get('active') else 'non appliquée ('+_texte(exo.get('raison'))+')'), styles['PetitTF']))
     surface_rows = [['Surface 6660-REV', 'Surface déclarée (m²)']]
     names={'P1':'P1 - Principale', 'P2':'P2 - Secondaire couverte', 'P3':'P3 - Secondaire non couverte',
            'PK1':'PK1 - Stationnement couvert', 'PK2':'PK2 - Stationnement non couvert'}
@@ -91,8 +95,8 @@ def creer_pdf_estimation(dossier):
         story.append(Paragraph('Certaines neutralisations historiques ont été reprises à titre provisoire.',styles['PetitTF']))
     story.append(Spacer(1, 12))
     story.append(Paragraph('<b>Réserves importantes</b>',styles['Heading3']))
-    story.append(Paragraph('Estimation de base sans exonérations particulières, sans frais de gestion et sans corrections historiques non documentées. '
+    story.append(Paragraph('Estimation sans autres exonérations particulières, sans frais de gestion et sans corrections historiques non documentées. '
                            'Pour un local existant avant 2017, le planchonnement et, jusqu’en 2025, le lissage peuvent modifier sensiblement la cotisation. '
-                           'Les taux repris d’années antérieures et les zones TEOM doivent être vérifiés.',styles['PetitTF']))
+                           'Les taux repris d’années antérieures et les zones TEOM doivent être vérifiés. Pour une construction nouvelle, l’exonération de l’article 1383 II du CGI suppose le respect des formalités déclaratives (90 jours).',styles['PetitTF']))
     pdf.build(story)
     return buffer.getvalue()
