@@ -15,6 +15,7 @@ from moteur import (COEFF_SURFACES, TAXES, insee_cadastral_adresse,
                     tarif_automatique, estimation)
 from historique_taux import resoudre_tout
 from mise_a_jour_simple import synchroniser_dgfip, synchroniser_taux
+from export_pdf import creer_pdf_estimation
 
 ROOT = Path(__file__).resolve().parent
 BASE = ROOT / 'data' / 'referentiel_initial.json'
@@ -121,7 +122,6 @@ def finaliser(candidat, categorie, surfaces, annee):
 
 st.markdown('''<style>
 .block-container{max-width:950px;padding-top:2rem;padding-bottom:4rem}
-[data-testid="stMetric"]{background:#f7f9fb;border:1px solid #dfe6ef;border-radius:15px;padding:16px}
 section[data-testid="stSidebar"]{display:none}
 </style>''',unsafe_allow_html=True)
 st.title('Estimez votre taxe foncière')
@@ -229,6 +229,14 @@ if calcule:
     stale=[f"{r['annee_source']} : {key}" for key,r in analyse['taux'].items() if r and r.get('decalage',0)>0]
     if stale: st.caption('Taux repris d’un millésime antérieur : '+', '.join(stale)+'.')
     if analyse['neutral_warnings']:st.caption('Certaines neutralisations historiques ont été reprises à titre provisoire.')
+    st.download_button(
+        'Télécharger mon estimation en PDF',
+        data=creer_pdf_estimation(calcule),
+        file_name=f"estimation_taxe_fonciere_{calcule['annee']}_{calcule['bien']['code_insee']}.pdf",
+        mime='application/pdf',
+        use_container_width=True,
+        key='export_pdf_express',
+    )
     with st.expander('Voir les paramètres utilisés et les sources'):
         st.write({'Commune':calcule['bien']['commune'],'Code cadastral':calcule['bien']['code_insee'],
                   'Parcelle':calcule['bien']['section']+' '+calcule['bien']['numero'],
