@@ -88,9 +88,13 @@ def creer_pdf_estimation(dossier):
              Paragraph(_nombre(result['total_estime']) + ' EUR', styles['MontantTF']),
              Paragraph('Estimation ' + _texte(dossier['annee']) + ' - hors frais de gestion', styles['CardMetaTF'])]
         ]], colWidths=[16*cm])
+        
         total_card.setStyle(TableStyle([
-            ('BACKGROUND',(0,0),(-1,-1),BLEU_PALE),
-            ('BOX',(0,0),(-1,-1),0.8,BORDURE),
-            ('LINEBEFORE',(0,0),(0,0),4,BLEU),
-            ('LEFTPADDING',(0,0),(-1,-1),15),
-            ('RIGHTPADDING',(0,0),(-1,-1),15),
+            ('BACKGROUND', (0, 0), (-1, -1), BLEU_PALE),
+            ('BOX', (0, 0), (-1, -1), 0.8, BORDURE),
+            ('LINEBEFORE', (0, 0), (0, 0), 4, BLEU),
+            ('LEFTPADDING', (0, 0), (-1, -1), 15),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 15),
+            ('TOPPADDING', (0, 0), (-1, -1), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 9),
+        ]))
