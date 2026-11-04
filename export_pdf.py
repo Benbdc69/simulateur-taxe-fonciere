@@ -88,15 +88,72 @@ def creer_pdf_estimation(dossier):
              Paragraph(_nombre(result['total_estime']) + ' EUR', styles['MontantTF']),
              Paragraph('Estimation ' + _texte(dossier['annee']) + ' - hors frais de gestion', styles['CardMetaTF'])]
         ]], colWidths=[16*cm])
-        
         total_card.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, -1), BLEU_PALE),
-            ('BOX', (0, 0), (-1, -1), 0.8, BORDURE),
-            ('LINEBEFORE', (0, 0), (0, 0), 4, BLEU),
-            ('LEFTPADDING', (0, 0), (-1, -1), 15),
-            ('RIGHTPADDING', (0, 0), (-1, -1), 15),
-            ('TOPPADDING', (0, 0), (-1, -1), 12),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 9),
+            ('BACKGROUND',(0,0),(-1,-1),BLEU_PALE),
+            ('BOX',(0,0),(-1,-1),0.8,BORDURE),
+            ('LINEBEFORE',(0,0),(0,0),4,BLEU),
+            ('LEFTPADDING',(0,0),(-1,-1),15),
+            ('RIGHTPADDING',(0,0),(-1,-1),15),
+            ('TOPPADDING',(0,0),(-1,-1),12),
+            ('BOTTOMPADDING',(0,0),(-1,-1),9),
         ]))
+        story.extend([total_card, Spacer(1, 15)])
+        story.append(Paragraph('<font color="#164C79"><b>Répartition par taxe</b></font>', styles['Heading3']))
+        lignes = result['lignes']
+        cards = []
+        for line in lignes:
+            label = _texte(line['taxe'])
+            amount = _nombre(line['montant'])
+            base = _nombre(line['base_taxable'])
+            taux = _nombre(line['taux_pct'])
+            exo_pct = _nombre(line['abattement_pct'])
+            card = [
+                Paragraph(label, styles['CardLabelTF']),
+                Spacer(1, 6),
+                Paragraph(f'{amount} EUR', styles['CardAmountTF']),
+                Spacer(1, 7),
+                Paragraph(f'Base : {base} EUR · Taux : {taux} %', styles['CardMetaTF']),
+                Paragraph(f'Exonération : {exo_pct} %', styles['CardMetaTF']),
+            ]
+            cards.append(card)
+        for i in range(0, len(cards), 2):
+            pair = cards[i:i+2]
+            if len(pair) == 1:
+                pair.append('')
+            tile_table = Table([pair], colWidths=[7.8*cm, 7.8*cm], hAlign='LEFT')
+            tile_table.setStyle(TableStyle([
+                ('BACKGROUND', (0,0),(-1,-1), colors.white),
+                ('BOX', (0,0),(-1,-1), 0.6, BORDURE),
+                ('INNERGRID', (0,0),(-1,-1), 1.8, colors.HexColor('#F6F9FC')),
+                ('VALIGN',(0,0),(-1,-1),'TOP'),
+                ('LINEBEFORE',(0,0),(-1,-1),2.5,BLEU),
+                ('LEFTPADDING',(0,0),(-1,-1),11),
+                ('RIGHTPADDING',(0,0),(-1,-1),9),
+                ('TOPPADDING',(0,0),(-1,-1),12),
+                ('BOTTOMPADDING',(0,0),(-1,-1),12),
+            ]))
+            story.append(KeepTogether([tile_table, Spacer(1, 8)]))
+
+    else:
+        story.append(Paragraph('<b>Estimation complète indisponible</b>',styles['Heading3']))
+        story.append(Paragraph('Certains paramètres requis sont indisponibles : aucun montant global de taxe n’est présenté.',styles['CorpsTF']))
+        missing=', '.join(analyse.get('missing') or [])
+        if missing:
+            story.append(Paragraph('<b>Données manquantes :</b> '+_texte(missing),styles['PetitTF']))
+    story.extend([Spacer(1, 12), Paragraph('<b>Paramètres de calcul</b>',styles['Heading3']),
+                  Paragraph('Secteur : '+_texte(partial.get('secteur'))+' ; tarif : '+_nombre(partial.get('tarif'))+
+                            ' EUR/m² ; coefficient de localisation : '+_nombre(partial.get('localisation'),4), styles['PetitTF']),
+                  Paragraph('Valeur locative brute : '+_nombre(partial.get('valeur_locative_brute'))+' EUR',styles['PetitTF'])])
+    out_of_date=[f"{key} ({rate['annee_source']})" for key,rate in analyse.get('taux',{}).items()
+                 if rate and rate.get('decalage',0)>0]
+    if out_of_date:
+        story.append(Paragraph('Taux repris de millésimes antérieurs : '+_texte(', '.join(out_of_date)),styles['PetitTF']))
+    if analyse.get('neutral_warnings'):
+        story.append(Paragraph('Certaines neutralisations historiques ont été reprises à titre provisoire.',styles['PetitTF']))
+    story.append(Spacer(1, 12))
+    story.append(Paragraph('<b>Réserves importantes</b>',styles['Heading3']))
+    story.append(Paragraph('Estimation sans autres exonérations particulières, sans frais de gestion et sans corrections historiques non documentées. '
+                           'Pour un local existant avant 2017, le planchonnement et, jusqu’en 2025, le lissage peuvent modifier sensiblement la cotisation. '
+                           'Les taux repris d’années antérieures et les zones TEOM doivent être vérifiés. Pour une construction nouvelle, l’exonération de l’article 1383 II du CGI suppose le respect des formalités déclaratives (90 jours).',styles['PetitTF']))
     pdf.build(story)
     return buffer.getvalue()
