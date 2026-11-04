@@ -4,7 +4,7 @@ Aucune requête réseau, aucune réévaluation des paramètres fiscaux.
 from io import BytesIO
 from xml.sax.saxutils import escape
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_RIGHT
+from reportlab.lib.enums import TA_RIGHT, TA_LEFT
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
@@ -36,6 +36,12 @@ def creer_pdf_estimation(dossier):
     styles.add(ParagraphStyle(name='MontantTF', parent=styles['Normal'], fontName='Helvetica-Bold',
                               fontSize=17, leading=22, textColor=colors.HexColor('#14273E'), spaceAfter=12))
     styles.add(ParagraphStyle(name='TableTF', parent=styles['Normal'], fontSize=8, leading=11))
+    styles.add(ParagraphStyle(name='CardLabelTF', parent=styles['Normal'], fontName='Helvetica', fontSize=9,
+                              leading=12, textColor=colors.HexColor('#3D4B61')))
+    styles.add(ParagraphStyle(name='CardAmountTF', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=15,
+                              leading=18, textColor=colors.HexColor('#15253C')))
+    styles.add(ParagraphStyle(name='CardMetaTF', parent=styles['Normal'], fontSize=8, leading=11,
+                              textColor=colors.HexColor('#526075')))
     buffer = BytesIO()
     pdf = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=1.7*cm, rightMargin=1.7*cm,
                             topMargin=1.7*cm, bottomMargin=1.6*cm,
@@ -49,7 +55,7 @@ def creer_pdf_estimation(dossier):
     exo = analyse.get('exoneration_neuf', {})
     if dossier.get('construction_nouvelle'):
         story.append(Paragraph('<b>Construction nouvelle :</b> oui ; année d’achèvement : '+_texte(dossier.get('annee_achevement')), styles['CorpsTF']))
-        story.append(Paragraph('Exonération de 40 % sur la part communale : '+('appliquée' if exo.get('active') else 'non appliquée ('+_texte(exo.get('raison'))+')'), styles['PetitTF']))
+        story.append(Paragraph('Exonération de 40 % sur la part communale et les taxes additionnelles éligibles (GEMAPI, TSE et syndicats sans fiscalité propre) : '+('appliquée' if exo.get('active') else 'non appliquée ('+_texte(exo.get('raison'))+')'), styles['PetitTF']))
     surface_rows = [['Surface 6660-REV', 'Surface déclarée (m²)']]
     names={'P1':'P1 - Principale', 'P2':'P2 - Secondaire couverte', 'P3':'P3 - Secondaire non couverte',
            'PK1':'PK1 - Stationnement couvert', 'PK2':'PK2 - Stationnement non couvert'}
@@ -67,16 +73,41 @@ def creer_pdf_estimation(dossier):
     if result:
         story.append(Paragraph('<b>Montant estimé des taxes, hors frais de gestion</b>',styles['CorpsTF']))
         story.append(Paragraph(_nombre(result['total_estime']) + ' EUR', styles['MontantTF']))
-        tax_rows=[['Composante','Base (EUR)','Taux (%)','Montant (EUR)']]
-        for line in result['lignes']:
-            tax_rows.append([Paragraph(_texte(line['taxe']),styles['TableTF']),
-                             _nombre(line['base_taxable']), _nombre(line['taux_pct']), _nombre(line['montant'])])
-        table=Table(tax_rows,colWidths=[7.2*cm, 3.1*cm, 2.3*cm, 3.4*cm],repeatRows=1, hAlign='LEFT')
-        table.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,0),colors.HexColor('#E9EFF5')),
-                                   ('GRID',(0,0),(-1,-1),0.3,colors.HexColor('#D9E1E8')),
-                                   ('VALIGN',(0,0),(-1,-1),'TOP'),('PADDING',(0,0),(-1,-1),6),
-                                   ('ALIGN',(1,1),(-1,-1),'RIGHT'),('FONTSIZE',(0,0),(-1,0),8)]))
-        story.append(table)
+        story.append(Paragraph('<b>Répartition par taxe</b>', styles['Heading3']))
+        lignes = result['lignes']
+        cards = []
+        for line in lignes:
+            label = _texte(line['taxe'])
+            amount = _nombre(line['montant'])
+            base = _nombre(line['base_taxable'])
+            taux = _nombre(line['taux_pct'])
+            exo_pct = _nombre(line['abattement_pct'])
+            card = [
+                Paragraph(label, styles['CardLabelTF']),
+                Spacer(1, 6),
+                Paragraph(f'{amount} EUR', styles['CardAmountTF']),
+                Spacer(1, 7),
+                Paragraph(f'Base : {base} EUR · Taux : {taux} %', styles['CardMetaTF']),
+                Paragraph(f'Exonération : {exo_pct} %', styles['CardMetaTF']),
+            ]
+            cards.append(card)
+        for i in range(0, len(cards), 2):
+            pair = cards[i:i+2]
+            if len(pair) == 1:
+                pair.append('')
+            tile_table = Table([pair], colWidths=[7.8*cm, 7.8*cm], hAlign='LEFT')
+            tile_table.setStyle(TableStyle([
+                ('BACKGROUND', (0,0),(-1,-1), colors.HexColor('#F1F4F8')),
+                ('BOX', (0,0),(-1,-1), 0.6, colors.HexColor('#D5DFE9')),
+                ('INNERGRID', (0,0),(-1,-1), 0.8, colors.white),
+                ('VALIGN',(0,0),(-1,-1),'TOP'),
+                ('LEFTPADDING',(0,0),(-1,-1),11),
+                ('RIGHTPADDING',(0,0),(-1,-1),9),
+                ('TOPPADDING',(0,0),(-1,-1),10),
+                ('BOTTOMPADDING',(0,0),(-1,-1),10),
+            ]))
+            story.append(KeepTogether([tile_table, Spacer(1, 8)]))
+
     else:
         story.append(Paragraph('<b>Estimation complète indisponible</b>',styles['Heading3']))
         story.append(Paragraph('Certains paramètres requis sont indisponibles : aucun montant global de taxe n’est présenté.',styles['CorpsTF']))
