@@ -98,3 +98,5 @@ def creer_pdf_estimation(dossier):
             ('TOPPADDING', (0, 0), (-1, -1), 12),
             ('BOTTOMPADDING', (0, 0), (-1, -1), 9),
         ]))
+    pdf.build(story)
+    return buffer.getvalue()
