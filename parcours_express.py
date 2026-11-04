@@ -148,21 +148,89 @@ def finaliser(candidat, categorie, surfaces, annee, construction_nouvelle=False,
     st.session_state.pop('_parcelles_attente',None)
 
 
+
 st.markdown('''<style>
-.block-container{max-width:980px;padding-top:2rem;padding-bottom:4rem}
-section[data-testid="stSidebar"]{display:none}
-.tf-summary-card,.tf-tax-card{border:1px solid rgba(127,127,127,.18);background:rgba(127,127,127,.08);border-radius:16px;padding:1rem 1rem .95rem 1rem;margin:.25rem 0 .75rem 0}
-.tf-summary-label,.tf-tax-head{font-size:.88rem;opacity:.8;margin-bottom:.35rem}
-.tf-summary-value,.tf-tax-amount{font-size:1.45rem;font-weight:700;line-height:1.15;margin-bottom:.2rem}
-.tf-summary-sub,.tf-tax-meta{font-size:.88rem;opacity:.8}
-.tf-table-wrap{border:1px solid rgba(127,127,127,.18);border-radius:16px;overflow:hidden;margin-top:.6rem}
-.tf-detail-table{width:100%;border-collapse:collapse;font-size:.95rem}
-.tf-detail-table thead th{background:rgba(127,127,127,.10);font-weight:600;text-align:left;padding:.8rem .9rem}
-.tf-detail-table tbody td{padding:.8rem .9rem;border-top:1px solid rgba(127,127,127,.12)}
-.tf-detail-table td.num,.tf-detail-table th.num{text-align:right}
-.tf-detail-table .strong{font-weight:700}
-@media (max-width: 640px){.tf-detail-table{font-size:.88rem}}
-</style>''',unsafe_allow_html=True)
+.block-container {
+    max-width: 980px;
+    padding-top: 2rem;
+    padding-bottom: 4rem;
+}
+
+section[data-testid="stSidebar"] {
+    display: none;
+}
+
+/* Cartes de résultats */
+.tf-summary-card,
+.tf-tax-card {
+    border: 1px solid #DFE8F2;
+    background: #FFFFFF;
+    color: #153957;
+    border-radius: 18px;
+    padding: 1.15rem 1.2rem;
+    margin: .25rem 0 .8rem 0;
+    box-shadow: 0 5px 22px rgba(22,67,109,.055);
+}
+
+.tf-tax-card {
+    border-left: 4px solid #246A9D;
+    min-height: 176px;
+}
+
+.tf-summary-card {
+    border-top: 3px solid #246A9D;
+    min-height: 152px;
+}
+
+/* Libellés */
+.tf-summary-label,
+.tf-tax-head {
+    font-size: .88rem;
+    font-weight: 600;
+    color: #547088;
+    margin-bottom: .45rem;
+}
+
+/* Montants */
+.tf-summary-value,
+.tf-tax-amount {
+    font-size: 1.55rem;
+    font-weight: 750;
+    line-height: 1.15;
+    margin-bottom: .4rem;
+    color: #164C79;
+}
+
+/* Textes secondaires */
+.tf-summary-sub,
+.tf-tax-meta {
+    font-size: .87rem;
+    color: #526B80;
+    line-height: 1.45;
+}
+
+/* Boutons principaux */
+div.stButton > button[kind="primary"],
+div.stFormSubmitButton > button[kind="primary"] {
+    background: #246A9D !important;
+    border-color: #246A9D !important;
+    color: #FFFFFF !important;
+}
+
+div.stButton > button[kind="primary"]:hover,
+div.stFormSubmitButton > button[kind="primary"]:hover {
+    background: #164C79 !important;
+    border-color: #164C79 !important;
+}
+
+/* Affichage mobile */
+@media (max-width: 640px) {
+    .tf-tax-card {
+        min-height: 0;
+    }
+}
+</style>''', unsafe_allow_html=True)
+
 st.title('Estimez votre taxe foncière')
 st.caption('Locaux professionnels · Déclaration 6660-REV · Informations fiscales récupérées automatiquement')
 
