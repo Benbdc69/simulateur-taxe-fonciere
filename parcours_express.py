@@ -1,0 +1,239 @@
+"""Parcours grand public : adresse, catégorie, 5 surfaces 6660-REV, année.
+Moteur RVLLP hérité de V13.1. Les montants incomplets ne sont jamais présentés
+comme une cotisation définitive. Les données publiques sont synchronisées à la demande.
+"""
+from __future__ import annotations
+import json
+import os
+from datetime import datetime
+from pathlib import Path
+import streamlit as st
+from cadastre import adresses, parcelles_a_l_adresse
+from moteur import (COEFF_SURFACES, TAXES, insee_cadastral_adresse,
+                    nom_commune_cadastrale, secteur_automatique,
+                    localisation_automatique, neutralisation_avec_teom_reference,
+                    tarif_automatique, estimation)
+from historique_taux import resoudre_tout
+from mise_a_jour_simple import synchroniser_dgfip, synchroniser_taux
+
+ROOT = Path(__file__).resolve().parent
+BASE = ROOT / 'data' / 'referentiel_initial.json'
+LOCAL = ROOT / 'data' / 'referentiel_local.json'
+
+
+def lire_ref():
+    source = LOCAL if LOCAL.exists() else BASE
+    return json.loads(source.read_text(encoding='utf-8'))
+
+
+def euro(val):
+    return f'{float(val):,.2f}'.replace(',', ' ').replace('.', ',') + ' €'
+
+
+def normaliser_identite(parcelle, adresse, ref):
+    code = str(parcelle.get('insee') or adresse.get('insee') or '')
+    code = insee_cadastral_adresse(code, adresse.get('code_postal', ''))
+    dep = str(parcelle.get('departement') or code[:2])
+    commune = nom_commune_cadastrale(ref, dep, code, adresse.get('commune', ''))
+    return {'code_insee': code, 'departement': dep, 'commune': commune,
+            'prefixe': str(parcelle.get('prefixe') or ''),
+            'section': str(parcelle.get('section') or ''),
+            'numero': str(parcelle.get('numero') or '')}
+
+
+def calculer_dossier(ref, ref_initial, bien, categorie, surfaces, annee):
+    """L'unique point d'entrée métier du parcours simple (aucune duplication de calcul).
+
+    Un 6660-REV ne contient pas l'ancienne VL 2017 ou les éventuelles
+    exonérations. On produit donc une estimation de base *conditionnelle*.
+    """
+    dep, com, code = bien['departement'], bien['commune'], bien['code_insee']
+    sect, sec_message = secteur_automatique(ref, dep, com, bien['prefixe'], bien['section'], code)
+    loc, loc_message, loc_year = localisation_automatique(
+        ref, dep, annee, com, bien['prefixe'], bien['section'], bien['numero'], code)
+    tarif = tarif_automatique(ref, dep, annee, categorie, sect)
+    neutral, neutral_message, neutral_warnings = neutralisation_avec_teom_reference(
+        ref, ref_initial, dep, com, annee, code, bien['prefixe'])
+    rates = resoudre_tout(ref, code, annee)
+    missing = []
+    if sect is None: missing.append('secteur d’évaluation')
+    if loc is None: missing.append('coefficient de localisation')
+    if tarif is None: missing.append('tarif de la catégorie / secteur / année')
+    coeffs = {}
+    taux = {}
+    for key, label in TAXES.items():
+        coeffs[key] = neutral.get(key) if neutral else None
+        taux[key] = rates.get(key, {}).get('taux') if rates.get(key) else None
+        if coeffs[key] is None: missing.append('neutralisation : ' + label)
+        if taux[key] is None: missing.append('taux : ' + label)
+    weighted = sum(float(surfaces.get(k,0)) * w for k,w in COEFF_SURFACES.items())
+    partial = {'surface_ponderee': weighted, 'secteur': sect, 'tarif': tarif, 'localisation': loc,
+               'valeur_locative_brute':weighted * float(tarif) * float(loc) if tarif is not None and loc is not None else None}
+    result = None
+    if weighted <= 0: missing.append('surface du local')
+    if not missing:
+        result = estimation(surfaces,tarif,loc,coeffs,taux,abattements={},planchonnements={},frais_pct=0)
+    return {'result':result,'partial':partial,'missing':missing,'taux':rates,
+            'neutralisations':neutral,'neutral_warnings':neutral_warnings,
+            'messages':{'secteur':sec_message,'localisation':loc_message,
+                        'neutralisation':neutral_message,'localisation_annee':loc_year}}
+
+
+def actualiser_si_necessaire(annee, bien):
+    """Synchronisation discrète une fois par session et territoire / année.
+    Ne met jamais à zéro une donnée existante si la source n'est pas joignable.
+    """
+    cle=(int(annee),bien['departement'],bien['code_insee'])
+    st.session_state.setdefault('_synch_effectuees',{})
+    done=st.session_state['_synch_effectuees']
+    if cle in done:
+        return done[cle]
+    erreurs=[]
+    try:
+        b=synchroniser_dgfip(annee,bien['departement'])
+        erreurs.extend(b.get('echecs',[]))
+    except Exception as exc:
+        erreurs.append('Sources de valeurs locatives indisponibles : '+str(exc))
+    try:
+        b=synchroniser_taux(annee,bien['code_insee'])
+        erreurs.extend(b.get('incidents',[]))
+    except Exception as exc:
+        erreurs.append('Sources de taux indisponibles : '+str(exc))
+    done[cle]=erreurs
+    return erreurs
+
+
+
+
+def finaliser(candidat, categorie, surfaces, annee):
+    adresse_result, parcelle = candidat
+    bien=normaliser_identite(parcelle,adresse_result,lire_ref())
+    with st.spinner('Calcul à partir des barèmes et taux disponibles…'):
+        issues=actualiser_si_necessaire(annee,bien)
+        res=calculer_dossier(lire_ref(),json.loads(BASE.read_text(encoding='utf-8')),
+             bien,categorie,surfaces,annee)
+    st.session_state['_calcul_express']={
+        'bien':bien,'adresse':adresse_result['libelle'],
+        'categorie':categorie,'annee':annee,
+        'surfaces':surfaces,'analyse':res,'sync_incidents':issues}
+    st.session_state.pop('_parcelles_attente',None)
+
+
+st.markdown('''<style>
+.block-container{max-width:950px;padding-top:2rem;padding-bottom:4rem}
+[data-testid="stMetric"]{background:#f7f9fb;border:1px solid #dfe6ef;border-radius:15px;padding:16px}
+section[data-testid="stSidebar"]{display:none}
+</style>''',unsafe_allow_html=True)
+st.title('Estimez votre taxe foncière')
+st.caption('Locaux professionnels · Déclaration 6660-REV · Informations fiscales récupérées automatiquement')
+
+ref = lire_ref()
+cat_map={c['code']:c for c in ref.get('categories',[])}
+if not cat_map:
+    st.error('Le référentiel des catégories fiscales est indisponible.')
+    st.stop()
+cat_codes=list(cat_map)
+
+with st.form('saisie_unique',border=True):
+    st.markdown('#### Votre local')
+    adresse=st.text_input('Adresse complète du bien',placeholder='Ex. 18 cours Gambetta, 69007 Lyon')
+    categorie=st.selectbox('Catégorie du local', cat_codes,
+        format_func=lambda code:f"{code} — {cat_map[code]['description']}")
+    st.markdown('**Surfaces figurant sur votre déclaration 6660-REV**')
+    st.caption('Saisissez les mètres carrés par type d’usage. L’application calcule les pondérations.')
+    surfaces={}
+    labels={'P1':'P1 · Principale','P2':'P2 · Secondaire couverte',
+            'P3':'P3 · Secondaire non couverte','PK1':'PK1 · Stationnement couvert',
+            'PK2':'PK2 · Stationnement non couvert'}
+    cols=st.columns(3)
+    for i,(k,v) in enumerate(labels.items()):
+        with cols[i%3]:
+            surfaces[k]=st.number_input(v,min_value=0.0,max_value=1_000_000.0,step=1.0,key='express_'+k)
+    annee=st.selectbox('Année d’imposition',list(range(2026,2016,-1)),index=0)
+    run=st.form_submit_button('Calculer mon estimation',type='primary',use_container_width=True)
+
+if run:
+    st.session_state.pop('_parcelles_attente',None)
+    st.session_state.pop('_calcul_express',None)
+    if len(adresse.strip())<6:
+        st.error('Indiquez une adresse complète pour localiser le bien.')
+    elif not any(surfaces.values()):
+        st.error('Renseignez au moins une surface.')
+    else:
+        with st.spinner('Recherche de la parcelle et des données fiscales…'):
+            try:
+                options=adresses(adresse)
+                if not options:
+                    st.error('Adresse non trouvée : précisez le numéro, la voie et le code postal.')
+                else:
+                    cand=[]
+                    for opt in options[:3]:
+                        try:
+                            parcels=parcelles_a_l_adresse(opt)
+                        except Exception:
+                            parcels=[]
+                        if parcels:
+                            cand=[(opt,p) for p in parcels[:12]]
+                            break
+                    if not cand:
+                        st.error('Aucune parcelle identifiable à cette adresse. Essayez une adresse plus précise.')
+                    elif len(cand)==1 and cand[0][1].get('recherche')=='Point dans la parcelle':
+                        finaliser(cand[0],categorie,surfaces,annee)
+                    else:
+                        st.session_state['_parcelles_attente']={
+                            'candidats':cand,'categorie':categorie,'surfaces':surfaces,'annee':annee}
+            except Exception as exc:
+                st.error('Recherche cadastrale momentanément indisponible : '+str(exc))
+
+pending=st.session_state.get('_parcelles_attente')
+if pending:
+    candidats=pending['candidats']
+    with st.container(border=True):
+        if len(candidats)>1:
+            st.markdown('**Confirmez la parcelle correspondant au local**')
+            selection=st.selectbox('Parcelle cadastrale',range(len(candidats)),
+                format_func=lambda i: f"{candidats[i][1]['section']} {candidats[i][1]['numero']} · {candidats[i][1]['insee']} · {candidats[i][1].get('distance_m','?')} m du point d’adresse")
+        else:
+            selection=0
+            p=candidats[0][1]
+            st.caption(f"Parcelle identifiée : {p['section']} {p['numero']}")
+        if st.button('Obtenir le résultat',type='primary',use_container_width=True):
+            try:
+                finaliser(candidats[selection],pending['categorie'],pending['surfaces'],pending['annee'])
+                st.rerun()
+            except Exception as exc:
+                st.error('Le calcul n’a pas pu être finalisé : '+str(exc))
+
+calcule=st.session_state.get('_calcul_express')
+if calcule:
+    analyse=calcule['analyse']; result=analyse['result']; partial=analyse['partial']
+    st.divider()
+    st.subheader('Votre estimation')
+    st.caption(f"{calcule['adresse']} · {calcule['annee']} · {calcule['categorie']}")
+    if result:
+        st.metric('Montant estimé des taxes, hors frais de gestion',euro(result['total_estime']))
+        st.caption('Estimation de base sans exonérations particulières ni corrections historiques non fournies ; frais de gestion non inclus.')
+        st.markdown('**Détail par taxe**')
+        st.dataframe([{'Composante':r['taxe'],'Base (€)':round(r['base_taxable'],2),
+                       'Taux (%)':r['taux_pct'],'Montant (€)':round(r['montant'],2)} for r in result['lignes']],
+                     use_container_width=True,hide_index=True)
+    else:
+        st.info('La valeur locative peut être estimée, mais une cotisation complète ne peut pas être établie sans inventer certains paramètres officiels.')
+        if partial['valeur_locative_brute'] is not None:
+            st.metric('Valeur locative brute estimée',euro(partial['valeur_locative_brute']))
+        st.caption('Données indisponibles : '+', '.join(analyse['missing']))
+    a,b=st.columns(2)
+    a.metric('Surface pondérée',f"{partial['surface_ponderee']:,.2f}".replace(',',' ')+' m²')
+    b.metric('Valeur locative brute', euro(partial['valeur_locative_brute']) if partial['valeur_locative_brute'] is not None else 'Indisponible')
+    st.warning('Pour un local existant avant 2017, les corrections historiques de planchonnement (et, jusqu’en 2025, de lissage) peuvent modifier sensiblement le montant. L’adresse et la déclaration 6660-REV seules ne permettent pas de les reconstituer. Vérifiez également les exonérations, les frais et le zonage TEOM.')
+    stale=[f"{r['annee_source']} : {key}" for key,r in analyse['taux'].items() if r and r.get('decalage',0)>0]
+    if stale: st.caption('Taux repris d’un millésime antérieur : '+', '.join(stale)+'.')
+    if analyse['neutral_warnings']:st.caption('Certaines neutralisations historiques ont été reprises à titre provisoire.')
+    with st.expander('Voir les paramètres utilisés et les sources'):
+        st.write({'Commune':calcule['bien']['commune'],'Code cadastral':calcule['bien']['code_insee'],
+                  'Parcelle':calcule['bien']['section']+' '+calcule['bien']['numero'],
+                  'Secteur':partial['secteur'],'Coefficient de localisation':partial['localisation'],
+                  'Tarif €/m²':partial['tarif'],'Taux et années':analyse['taux'],
+                  'Neutralisations':analyse['neutralisations']})
+        if calcule['sync_incidents']:
+            st.caption('Certaines sources n’ont pas répondu. Le référentiel précédent a été conservé.')

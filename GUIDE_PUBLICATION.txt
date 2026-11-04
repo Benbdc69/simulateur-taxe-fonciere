@@ -1,0 +1,15 @@
+SIMULATEUR TAXE FONCIERE V13.1 — PUBLICATION GITHUB / STREAMLIT
+
+1. Créer un compte GitHub, puis un nouveau dépôt PRIVATE, sans initialiser README.
+2. Sur le dépôt GitHub : Add file > Upload files. Glisser le CONTENU de ce dossier (pas le ZIP) : fichiers Python, requirements.txt, .gitignore et le dossier data/ avec referentiel_initial.json.
+3. Cliquer Commit changes. Les fichiers app.py et requirements.txt doivent être à la racine, et data/referentiel_initial.json dans data/.
+4. Sur votre Mac, exécuter depuis ce dossier : python3 creer_mot_de_passe.py. Choisir votre propre mot de passe (14 caractères minimum), copier la ligne TF_SHARED_PASSWORD_HASH = "scrypt$...". Ne pas partager cette ligne publiquement.
+5. Ouvrir https://share.streamlit.io ; se connecter avec GitHub et autoriser l'accès au dépôt privé. Créer une application existante avec le dépôt, la branche main et le fichier app.py.
+6. Advanced settings > Secrets : coller la ligne d'empreinte obtenue. NE JAMAIS définir TF_LOCAL_MODE=1 sur le cloud. Déployer.
+7. Pour inviter toute personne en possession du mot de passe sans invitation Streamlit, rendre l'application PUBLIC depuis Sharing. L'URL de l'écran de connexion sera publique : seule la page applicative sera protégée par le mot de passe partagé.
+
+NE PAS PUBLIER : data/referentiel_local.json, .streamlit/secrets.toml, fichiers clients, avis d'imposition, rapports, sauvegardes.
+
+ATTENTION CONFIDENTIALITE : mot de passe commun = pas de gestion nominative ni protection forte contre les tentatives automatisées ; Streamlit Community Cloud gratuit ne garantit pas la persistance des fichiers locaux. Ne pas utiliser pour des dossiers clients sensibles sans revue de sécurité/RGPD et stockage adapté.
+
+CODE SOURCE : dérivé du dossier V13.1 local, sans modifications du moteur fiscal.
