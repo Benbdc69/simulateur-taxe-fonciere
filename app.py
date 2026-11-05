@@ -44,6 +44,9 @@ if os.environ.get('TF_LOCAL_MODE') != '1':
 
 # Parcours unique : le moteur et le calcul détaillé éprouvés en V9.
 # Aucune seconde page de calcul n’est exécutée, ce qui évite les régressions.
-pages=[st.Page('parcours_express.py',title='Estimer',icon='🧮',default=True)]
-pg=st.navigation(pages,position='sidebar')
+pages=[
+    st.Page('parcours_express.py',title='Local professionnel',icon='🏢',default=True),
+    st.Page('parcours_habitation.py',title='Habitation H1 / H2',icon='🏠'),
+]
+pg=st.navigation(pages,position='top')
 pg.run()
