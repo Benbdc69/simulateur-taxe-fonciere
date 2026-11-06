@@ -293,7 +293,7 @@ else:
         scenarios = r['tarifs']
         hypotheses = sorted({t['pieces_chauffage_scenario'] for t in scenarios if 'pieces_chauffage_scenario' in t})
         if hypotheses:
-            hypothese = st.selectbox('Hypothèse de chauffage à examiner', hypotheses,
+            hypothese = st.selectbox('Hypothèse de chauffage à examiner', hypotheses, index=len(hypotheses)-1,
                 format_func=lambda n: f'{n} pièces desservies (hypothèse)',
                 help='Ce choix est distinct de la série tarifaire. La fourchette compare les séries pour une même catégorie et une même hypothèse de chauffage.')
             scenarios = [t for t in scenarios if t.get('pieces_chauffage_scenario') == hypothese]
@@ -310,7 +310,7 @@ else:
             help='Choisissez une série de la catégorie retenue. Ce choix ne confirme pas son attribution au logement.')
         x = scenarios[choice]
         if 'pieces_chauffage_scenario' in x:
-            st.info(f"Hypothèse de ce scénario : {x['pieces_chauffage_scenario']} pièces desservies par le chauffage. Cette hypothèse n’est pas confirmée par la seule case du H2.")
+            st.info(f"Chauffage pris en compte : {x['pieces_chauffage_scenario']} × 2 m² = +{2*x['pieces_chauffage_scenario']} m² d’équivalence de surface. Cette majoration s’ajoute à la surface nette avant application du tarif cadastral. Le scénario suppose que ce nombre de pièces et annexes déclarées est desservi ; la case chauffage du H2 ne confirme pas à elle seule cette desserte.")
         sp = x['surfaces']
         if sp['dependances_a_evaluer_separement']:
             st.warning('Estimation partielle : terrasse et/ou dépendances d’appartement sont signalées mais non chiffrées. Les montants portent sur la partie principale uniquement.')

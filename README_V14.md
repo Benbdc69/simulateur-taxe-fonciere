@@ -84,3 +84,9 @@ Lorsque plusieurs séries existent dans la catégorie choisie, la fourchette
 concerne uniquement ces séries pour une même hypothèse de chauffage. L’hypothèse
 de chauffage se choisit séparément. Le PDF conserve ce même périmètre. Sans taux
 complets, la fourchette porte sur les bases TFPB, sans inventer de cotisations.
+
+Lorsque le chauffage H2 est déclaré, le scénario affiché par défaut suppose
+que toutes les pièces et annexes déclarées sont desservies. La majoration
+« nombre × 2 m² » est explicitée dans le résultat et le PDF. L’hypothèse sans
+équivalence reste accessible séparément ; la desserte doit être confirmée
+sur le dossier cadastral. Ces m² sont des équivalences, pas de la surface réelle.

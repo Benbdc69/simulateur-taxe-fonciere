@@ -84,7 +84,7 @@ def generer_pdf_habitation(d):
     story.append(Paragraph('Périmètre et réserves',st['AxHeadH']))
     notes=list(d.get('reserves_h2', []))
     if 'pieces_chauffage_scenario' in chosen:
-        notes.append(f"Scénario sélectionné : hypothèse de {chosen['pieces_chauffage_scenario']} pièces desservies par le chauffage ; ce nombre n’est pas confirmé par la case chauffage du H2.")
+        notes.append(f"Chauffage : {chosen['pieces_chauffage_scenario']} pièces et annexes supposées desservies x 2 m² = +{2*chosen['pieces_chauffage_scenario']} m² d’équivalence, ajoutés à la surface nette avant application du tarif. La desserte est une hypothèse, non confirmée par la seule case chauffage du H2.")
     if not d.get('categorie_confirmee'):
         notes.append('Catégorie choisie à titre indicatif avec l’aide au classement : elle ne constitue pas un classement confirmé par l’administration. À vérifier sur la fiche cadastrale.')
     if d.get('categorie_inconnue'):
