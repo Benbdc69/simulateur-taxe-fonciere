@@ -1,0 +1,94 @@
+"""Régressions du dossier habitation et des entrées numériques."""
+import sys
+import unittest
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from dossier_habitation import code_adresse, calculer_scenarios
+from historique_taux import COMPOSANTES, enregistrer
+from moteur_habitation import surface_totale, simulations_tarifs
+from export_habitation_pdf import generer_pdf_habitation
+from tarifs_habitation import SOURCE
+
+
+class HabitationGuideeTests(unittest.TestCase):
+    def setUp(self):
+        self.adr = {'insee': '69123', 'code_postal': '69007', 'commune': 'Lyon', 'libelle': '18 cours Gambetta, 69007 Lyon'}
+        self.saisie = {'annee': 2026, 'nature': 'A', 'categorie': '5', 'surface': 45., 'parametres': {}}
+        self.rows = [dict(insee='69387', nature='A', categorie=c, serie=s, origine='387', tarif_1970=t, annee_tarif=2024)
+                     for c, s, t in [('5', 'A', 10.), ('5', 'B', 12.), ('6', 'A', 8.)]]
+        self.ref = {}
+        for k in COMPOSANTES:
+            enregistrer(self.ref, '69387', 2026, k, 30 if k == 'commune' else 0, 'Fixture avis', zonage_confirme=True)
+
+    def calculer(self):
+        return calculer_scenarios(self.saisie, self.adr, self.ref, self.rows)
+
+    def test_lyon_arrondissement_conserve_depuis_adresse_confirmee(self):
+        self.assertEqual(code_adresse(self.adr), '69387')
+        self.assertEqual(code_adresse({**self.adr, 'insee': '69386'}), '69386')
+
+    def test_formule_et_taux_nuls_documentes(self):
+        r = self.calculer()
+        self.assertEqual(len(r['tarifs']), 2)
+        x = r['tarifs'][0]
+        self.assertEqual(x['surfaces']['surface_ponderee'], 68)
+        self.assertEqual(x['vl_1970'], 680)
+        self.assertEqual(x['vl_annee'], round(680 * r['facteur']['coefficient_cumule'], 2))
+        self.assertEqual(x['base_tf'], round(x['vl_annee'] * .5, 2))
+        self.assertEqual(x['total'], round(x['base_tf'] * .30, 2))
+        self.assertEqual(len(x['montants']), 6)
+
+    def test_taux_absent_ne_devient_pas_zero(self):
+        del self.ref['taux_annuels']['69123']['2026']['teom']
+        r = self.calculer()
+        self.assertFalse(r['taux_complets'])
+        self.assertTrue(all('total' not in x for x in r['tarifs']))
+        self.assertTrue(all('base_tf' in x for x in r['tarifs']))
+
+    def test_categorie_inconnue_ne_reprend_pas_une_surface_unique(self):
+        self.saisie['categorie'] = None
+        r = self.calculer()
+        self.assertTrue(r['categorie_inconnue'])
+        self.assertEqual({x['categorie'] for x in r['tarifs']}, {'5', '6'})
+        self.assertNotEqual(r['tarifs'][0]['surfaces']['surface_ponderee'], r['tarifs'][-1]['surfaces']['surface_ponderee'])
+
+    def test_dependances_appartement_exclues_maison_ponderees(self):
+        self.saisie['parametres'] = {'annexes': 20., 'terrasse': 10.}
+        x = self.calculer()['tarifs'][0]
+        self.assertTrue(x['surfaces']['dependances_a_evaluer_separement'])
+        self.assertEqual(x['surfaces']['surface_ponderee'], 68)
+        maison = surface_totale(45, 'M', '5', annexes=20, terrasse=10)
+        self.assertEqual(maison['annexes_ponderees'], 8)
+        self.assertEqual(maison['terrasse_ponderee'], 4)
+        self.assertFalse(maison['dependances_a_evaluer_separement'])
+
+    def test_pas_de_repli_sur_une_autre_categorie_ou_commune(self):
+        self.saisie['categorie'] = '8'
+        with self.assertRaisesRegex(ValueError, 'Aucun tarif'):
+            self.calculer()
+        self.saisie['categorie'] = '5'
+        self.adr['insee'] = '69386'
+        with self.assertRaisesRegex(ValueError, 'Aucun tarif'):
+            self.calculer()
+
+    def test_pdf_du_scenario_selectionne(self):
+        self.saisie['categorie'] = None
+        r = self.calculer()
+        x = r['tarifs'][-1]
+        dossier = {**r, 'categorie': x['categorie'], 'surfaces': x['surfaces'],
+                   'tarifs': [x], 'serie_selectionnee': 0, 'source_tarifs': SOURCE}
+        self.assertTrue(generer_pdf_habitation(dossier).startswith(b'%PDF'))
+
+    def test_quantites_fractionnaires_et_non_finies_refusees(self):
+        for params in [{'douches': 1.5}, {'wc': float('nan')}, {'etage': 2.5}]:
+            with self.subTest(params=params), self.assertRaises(ValueError):
+                surface_totale(45, 'A', '5', **params)
+        for sp, prix, taux in [(float('nan'), 10, 30), (45, -1, 30), (45, 10, float('inf'))]:
+            with self.subTest(sp=sp, prix=prix, taux=taux), self.assertRaises(ValueError):
+                simulations_tarifs(sp, [{'serie': 'A', 'tarif_1970': prix}], 10, {'commune': taux})
+        for rates in [{}, {'commune': None}]:
+            self.assertNotIn('total', simulations_tarifs(45, [{'serie': 'A', 'tarif_1970': 10}], 10, rates)[0])
+
+
+if __name__ == '__main__':
+    unittest.main()

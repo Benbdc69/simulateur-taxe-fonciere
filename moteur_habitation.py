@@ -34,8 +34,10 @@ def surface_comparative(surface,nature,categorie):
     return floor(min(s,20)*c + max(0,min(s,limite)-20)*.9+max(0,s-limite)*.75)
 
 def _ascenseur(etage,ascenseur):
-    n=int(etage)
-    if n<0:raise ValueError("L'étage ne peut pas être négatif")
+    valeur=float(etage)
+    if not isfinite(valeur) or valeur<0 or not valeur.is_integer():
+        raise ValueError("L'étage doit être un entier positif ou nul")
+    n=int(valeur)
     if n<=1:return 0.
     if ascenseur:return .05
     if n==2 or n==3:return 0.
@@ -54,6 +56,8 @@ def surface_totale(surface,nature,categorie,annexes=0,coeff_annexes=.4,
         raise ValueError('Coefficient de dépendance hors intervalle 0,2–0,6')
     for x in (surface,annexes,terrasse,baignoires,douches,lavabos,wc,pieces_chauffees):
         if not isfinite(float(x)) or float(x)<0:raise ValueError('Quantité négative ou invalide')
+    for x in (baignoires,douches,lavabos,wc,pieces_chauffees):
+        if not float(x).is_integer():raise ValueError('Les nombres d’équipements et de pièces doivent être entiers')
     comparaison=surface_comparative(surface,nature,categorie)
     # Décomposition traçable du barème. Ces champs n'affectent pas le calcul.
     importance, seuil = _config(nature, categorie)
@@ -106,10 +110,17 @@ def surface_totale(surface,nature,categorie,annexes=0,coeff_annexes=.4,
             'nature':nature,'categorie':_categ(categorie)}
 
 def simulations_tarifs(surface_ponderee,tarifs,coefficient_cumule=None,taux=None):
+    surface=float(surface_ponderee)
+    if not isfinite(surface) or surface<=0:raise ValueError('Surface pondérée invalide')
+    if taux is not None:
+        for valeur in taux.values():
+            if valeur is not None and (not isfinite(float(valeur)) or not 0<=float(valeur)<=100):
+                raise ValueError('Un taux doit être compris entre 0 et 100 %')
     if not tarifs:return []
     out=[]
     for row in tarifs:
         tarif=float(row['tarif_1970'])
+        if not isfinite(tarif) or tarif<=0:raise ValueError('Tarif cadastral invalide')
         obj={'serie':str(row['serie']),'origine':str(row.get('origine','')),
              'tarif_1970':tarif,'vl_1970':round(float(surface_ponderee)*tarif,2),
              'annee_tarif':row.get('annee_tarif',2024),'categorie':row.get('categorie')}
@@ -119,7 +130,7 @@ def simulations_tarifs(surface_ponderee,tarifs,coefficient_cumule=None,taux=None
             obj['coefficient_cumule']=factor
             obj['vl_annee']=round(obj['vl_1970']*factor,2)
             obj['base_tf']=round(obj['vl_annee']*.5,2)
-            if taux is not None:
+            if taux and all(v is not None for v in taux.values()):
                 obj['montants']={k:round(obj['base_tf']*float(v)/100,2) for k,v in taux.items() if v is not None}
                 obj['total']=round(sum(obj['montants'].values()),2)
         out.append(obj)

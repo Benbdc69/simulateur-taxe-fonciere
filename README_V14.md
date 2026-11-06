@@ -27,4 +27,25 @@ Ne déposez jamais `data/referentiel_local.json`, les dossiers `data/historique`
 
 ## Tests
 
-Tests de non-régression V13.1 inclus ; test additionnel du contrat du nouveau parcours. Les appels réels IGN/DGFiP et le rendu Streamlit ne sont pas testés dans cet environnement : valider sur le Mac avant publication générale.
+### Saisie guidée professionnel et habitation
+
+Le parcours professionnel explique les rubriques P1/P2/P3/PK1/PK2 et les champs
+d’historique. La catégorie fiscale doit être choisie explicitement. Les champs
+conditionnels apparaissent dès le changement de choix ; modifier une saisie
+invalide le résultat précédent. Le périmètre d’imposition est limité à 2017–2026.
+
+Le parcours habitation comporte trois étapes : recherche et confirmation de
+l’adresse, surfaces et équipements, vérification puis estimation. Les saisies
+sont conservées lors du retour à une étape précédente. Une catégorie inconnue
+ouvre les scénarios publiés disponibles, sans attribuer de classement au bien.
+Chaque catégorie conserve sa propre surface pondérée. Le détail du calcul,
+les taux manquants ou antérieurs et le zonage TEOM non confirmé sont affichés ;
+le PDF reprend la catégorie du scénario sélectionné. Les dépendances distinctes
+d’appartement restent hors du chiffrage de la partie principale.
+
+Validation locale : `python -m unittest discover -s tests -v`. Les tests de
+navigation Streamlit simulent les API publiques et ne valident pas leur accès réel.
+
+Les tests de non-régression du moteur sont inclus. Les appels réels IGN/DGFiP
+doivent être vérifiés sur un environnement disposant des autorisations réseau
+nécessaires avant publication générale.

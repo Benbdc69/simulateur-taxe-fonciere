@@ -7,6 +7,8 @@ from moteur import (COEFF_SURFACES, TAXES, insee_cadastral_adresse, nom_commune_
                     secteur_automatique, localisation_automatique,
                     neutralisation_avec_teom_reference, tarif_automatique, estimation)
 from historique_taux import resoudre_tout, enregistrer
+from exoneration_neuf import exon_neuf_non_habitation
+from planchonnement_saisie import preparer_planchonnement
 
 HERE=Path(__file__).resolve().parents[1]
 

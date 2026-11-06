@@ -69,12 +69,18 @@ def generer_pdf_habitation(d):
         story.append(t)
     story.append(Paragraph('Périmètre et réserves',st['AxHeadH']))
     notes=[]
+    if d.get('categorie_inconnue'):
+        notes.append('Catégorie cadastrale inconnue : ce rapport détaille un scénario exploratoire sélectionné, et ne confirme pas le classement du logement. D’autres catégories peuvent être disponibles dans le simulateur.')
     if len(d['tarifs'])>1:notes.append('Plusieurs séries de tarifs : la série exacte du local doit être confirmée dans la fiche cadastrale.')
     if d['surfaces'].get('dependances_a_evaluer_separement'):
         notes.append('IMPORTANT : terrasse et/ou dépendances d’appartement peuvent faire l’objet d’une évaluation fiscale distincte ; leur valeur n’entre pas dans les montants ci-dessus.')
     if not d.get('taux_complets'):notes.append('Une ou plusieurs composantes fiscales ne sont pas documentées. Aucun total complet n’est affiché.')
+    anciens=[f"{k} ({v['annee_source']})" for k,v in rates.items() if v and int(v.get('annee_source',d['annee']))<d['annee']]
+    if anciens:notes.append('Taux antérieurs repris à titre indicatif : '+', '.join(anciens)+'.')
+    if rates.get('teom') and not rates['teom'].get('zonage_confirme'):
+        notes.append('Le zonage TEOM n’est pas confirmé pour cette adresse ; la cotisation correspondante reste à vérifier.')
     notes.append('* Cotisations hors frais de gestion, exonérations/dégrèvements personnels et autres taxes annexes spécifiques. Valeurs arrondies ; taux antérieurs éventuels.')
-    notes.append('Surface habitable renseignée par l’utilisateur ; elle peut différer de la surface cadastrale mesurée au sol.')
+    notes.append('Surface réelle déclarée par l’utilisateur ; une surface habitable ou Carrez peut différer de la surface cadastrale mesurée au sol.')
     for n in notes:story.append(Paragraph('• '+ph(n),st['AxTinyH']))
     # Les références documentaires sont regroupées à la fin de l'annexe de contrôle.
     # Cela évite une page supplémentaire contenant seulement les sources.
