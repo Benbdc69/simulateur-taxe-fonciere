@@ -64,6 +64,8 @@ class ParcoursGuidesUI(unittest.TestCase):
             champ(at.number_input, 'Cuisines de moins de 9 m²').set_value(1)
             champ(at.checkbox, 'Chauffage ou climatisation dans les DOM').check()
             champ(at.number_input, 'Nombre de pièces chauffées').set_value(2)
+            champ(at.number_input, 'Niveau du logement pour le correctif d’ascenseur').set_value(4)
+            champ(at.checkbox, 'Ascenseur de l’immeuble desservant l’étage du logement').check()
             champ(at.number_input, 'Surface totale des pièces et annexes affectées à l’habitation (m²)').set_value(45.)
             champ(at.number_input, 'Garage, cave, grenier et autres dépendances (m²)').set_value(12.)
             champ(at.button, 'Vérifier mes informations').click().run()
@@ -77,6 +79,8 @@ class ParcoursGuidesUI(unittest.TestCase):
             champ(at.button, 'Calculer mon estimation').click().run()
             self.assertFalse(at.exception, [str(x.value) for x in at.exception])
             self.assertEqual(len(at.session_state['hab_resultat']['tarifs']), 2)
+            self.assertEqual(at.session_state['hab_resultat']['tarifs'][0]['surfaces']['correctif_ascenseur'], .05)
+            self.assertTrue(any('Correctif article 324 S : +0.05' in x.value for x in at.caption))
             self.assertTrue(any('à confirmer' in x.value for x in at.warning))
             self.assertTrue(any('Estimation partielle' in x.value for x in at.warning))
             self.assertNotIn('Hypothèse de chauffage à examiner', [x.label for x in at.selectbox])
@@ -108,6 +112,8 @@ class ParcoursGuidesUI(unittest.TestCase):
             self.assertEqual(champ(at.number_input, 'Chambres et autres pièces habitables').value, 2)
             self.assertTrue(champ(at.checkbox, 'Chauffage ou climatisation dans les DOM').value)
             self.assertEqual(champ(at.number_input, 'Nombre de pièces chauffées').value, 2)
+            self.assertEqual(champ(at.number_input, 'Niveau du logement pour le correctif d’ascenseur').value, 4)
+            self.assertTrue(champ(at.checkbox, 'Ascenseur de l’immeuble desservant l’étage du logement').value)
 
     def test_resultat_incomplet_affiche_valeur_locative_sans_cotisations(self):
         from dossier_habitation import calculer_scenarios

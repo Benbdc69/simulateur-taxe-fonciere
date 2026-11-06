@@ -166,9 +166,6 @@ elif etape == 2:
                         help='Coefficient cadastral de 0,2 à 0,6 selon le service rendu. Le choix 0,4 est une hypothèse, pas une valeur déduite de votre adresse. Reprenez la valeur de votre fiche si elle est connue.')
                     coef_terrasse = st.selectbox('Pondération de la terrasse', [.2, .3, .4, .5, .6], index=[.2, .3, .4, .5, .6].index(params.get('coeff_terrasse', .4)),
                         help='Coefficient de 0,2 à 0,6 à confirmer sur le dossier cadastral. Il s’applique uniquement à la terrasse et non aux pièces du logement.')
-                else:
-                    etage = st.number_input('Étage du logement', min_value=0, max_value=80, value=int(params.get('etage', 0)),
-                        help='0 pour le rez-de-chaussée, 1 pour le premier étage, etc. L’étage intervient dans le correctif d’ascenseur des appartements.')
         st.markdown('#### Équipements du logement' if maison else '#### 42 · Confort du logement — H2')
         st.caption('Le calcul transforme les équipements en équivalences de surface. Vérifiez les quantités proposées : elles ne sont pas déduites automatiquement du nombre de pièces.')
         a, b = st.columns(2)
@@ -204,7 +201,10 @@ elif etape == 2:
         if not maison:
             chauffage = st.checkbox('Chauffage ou climatisation dans les DOM', value=h2.get('chauffage', False), help='Case 6 du cadre 42 du H2. Cochez selon l’équipement du logement. Le référentiel de calcul actuel est limité à la métropole ; les DOM ne sont pas chiffrés.')
             pieces_chauffees_h2 = st.number_input('Nombre de pièces chauffées', min_value=0, value=int(h2.get('pieces_chauffees', 0)), step=1, help='Saisissez vous-même le nombre de pièces et annexes desservies par le chauffage. Le simulateur ne le déduit pas du nombre total de pièces. Chaque pièce déclarée ajoute 2 m² d’équivalence. Indiquez 0 en l’absence de chauffage.')
-            ascenseur = st.checkbox('Ascenseur', value=params.get('ascenseur', False), help='Case 8 du cadre 42 : présence d’un ascenseur desservant le logement.')
+            st.markdown('**Étage et ascenseur de l’immeuble — article 324 S**')
+            etage = st.number_input('Niveau du logement pour le correctif d’ascenseur', min_value=0, max_value=80, value=int(params.get('etage', 0)), help='0 = rez-de-chaussée, 1 = premier niveau, etc. Selon l’article 324 S, l’entresol compte pour un étage : avec un entresol sous votre premier étage, saisissez 2. Ne comptez pas deux fois l’entresol.')
+            ascenseur = st.checkbox('Ascenseur de l’immeuble desservant l’étage du logement', value=params.get('ascenseur', False), help='Renseigne la colonne « immeuble avec ascenseur » de l’article 324 S. Il s’agit de la desserte de l’étage par l’ascenseur de l’immeuble, pas d’un ascenseur privatif à l’intérieur du logement.')
+            st.caption('Correctif ajouté au correctif d’ensemble : avec ascenseur, 0 au RDC et au 1er niveau, +0,05 à partir du 2e ; sans ascenseur, 0 jusqu’au 3e, −0,05 au 4e, −0,10 au 5e, −0,15 à partir du 6e. Ce correctif n’est pas une équivalence de surface en m².')
             escalier_service = st.checkbox('Escalier de service', value=h2.get('escalier_service', False), help='Case 9 du cadre 42. Cette information est conservée dans le dossier ; aucun coefficient supplémentaire n’est inventé.')
             st.caption('La majoration sera de 2 m² × le nombre de pièces chauffées que vous saisissez. Aucun comptage automatique n’est effectué.')
         a, b = st.columns(2)
@@ -319,6 +319,8 @@ else:
             st.warning('Taux antérieurs repris à titre indicatif : ' + ', '.join(anciens) + '.')
         if r['taux'].get('teom') and not r['taux']['teom'].get('zonage_confirme'):
             st.warning('Le zonage TEOM n’est pas confirmé pour cette adresse : la cotisation correspondante reste à vérifier.')
+        if sp['nature'] == 'A':
+            st.caption(f"Ascenseur de l’immeuble : {'oui' if sp['detail_correctifs']['ascenseur_immeuble'] else 'non'} · Niveau retenu : {sp['detail_correctifs']['niveau_local']} · Correctif article 324 S : {sp['correctif_ascenseur']:+.2f}, ajouté au correctif d’ensemble avant calcul de la surface nette.")
         if 'montants' in x:
             carte_habitation(
                 'Cotisations annuelles estimées — périmètre calculé', fmt(x['total']),

@@ -120,6 +120,19 @@ class HabitationGuideeTests(unittest.TestCase):
                 self.saisie['h2'] = {'pieces': pieces, 'chauffage': True}
                 self.calculer()
 
+    def test_bareme_ascenseur_immeuble_article_324_s(self):
+        for niveau, avec, sans in [(0, 0, 0), (1, 0, 0), (2, .05, 0), (3, .05, 0),
+                                    (4, .05, -.05), (5, .05, -.10), (6, .05, -.15), (10, .05, -.15)]:
+            for present, attendu in [(True, avec), (False, sans)]:
+                with self.subTest(niveau=niveau, ascenseur=present):
+                    r = surface_totale(45, 'A', '5', etage=niveau, ascenseur=present)
+                    self.assertEqual(r['correctif_ascenseur'], attendu)
+                    self.assertEqual(r['correctif'], round(1 + attendu, 4))
+                    self.assertEqual(r['detail_correctifs']['niveau_local'], niveau)
+                    self.assertEqual(r['detail_correctifs']['ascenseur_immeuble'], present)
+                    self.assertEqual(r['equivalence_confort'], 19)
+        self.assertEqual(surface_totale(45, 'M', '5', etage=6, ascenseur=True)['correctif_ascenseur'], 0)
+
     def test_quantites_fractionnaires_et_non_finies_refusees(self):
         for params in [{'douches': 1.5}, {'wc': float('nan')}, {'etage': 2.5}]:
             with self.subTest(params=params), self.assertRaises(ValueError):

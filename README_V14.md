@@ -85,3 +85,12 @@ complets, la fourchette porte sur les bases TFPB, sans inventer de cotisations.
 
 Le résultat et le PDF explicitent la majoration chauffage : nombre de pièces
 chauffées saisi × 2 m². Ces m² sont des équivalences, pas de la surface réelle.
+
+### Ascenseur de l’immeuble — article 324 S
+
+La desserte par l’ascenseur de l’immeuble et le niveau du logement sont saisis
+explicitement (entresol compté pour un étage). Le barème 324 S est ajouté au
+correctif d’ensemble avant calcul de la surface nette ; il ne correspond ni à
+un ascenseur intérieur privatif ni à une équivalence de surface supplémentaire.
+Le niveau, la présence d’ascenseur et le coefficient retenu sont tracés à l’écran
+et dans le PDF. Le barème numérique existant est conservé et testé à chaque niveau.

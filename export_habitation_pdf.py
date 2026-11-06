@@ -124,6 +124,8 @@ def generer_pdf_habitation(d):
     corr=sp.get('detail_correctifs') or {}
     if corr:
         story.append(Paragraph('Correctifs : entretien '+ph(corr.get('entretien'))+' (x '+ph(corr.get('coef_entretien'))+'), situation générale '+ph(corr.get('situation_generale'))+' ('+ph(corr.get('correctif_situation_generale'))+'), situation particulière '+ph(corr.get('situation_particuliere'))+' ('+ph(corr.get('correctif_situation_particuliere'))+'), étage/ascenseur ('+ph(corr.get('correctif_ascenseur'))+').',st['AxNormalH']))
+    if sp.get('nature') == 'A' and corr.get('niveau_local') is not None:
+        story.append(Paragraph('Article 324 S : niveau retenu '+ph(corr['niveau_local'])+' (entresol compté pour un étage) ; ascenseur de l’immeuble desservant l’étage : '+('oui' if corr.get('ascenseur_immeuble') else 'non')+' ; correctif '+f"{float(sp['correctif_ascenseur']):+.2f}"+' ajouté au correctif d’ensemble. Ce correctif ne correspond pas à un ascenseur privatif intérieur ni à des m² d’équipement.',st['AxNormalH']))
     story.append(Paragraph('Coefficient global appliqué : <b>'+ph(sp.get('correctif','?'))+'</b> ; surface nette après application et arrondi : <b>'+ph(sp.get('surface_nette','?'))+' m²</b>.',st['AxNormalH']))
     eq=sp.get('detail_confort') or {}
     if eq:
