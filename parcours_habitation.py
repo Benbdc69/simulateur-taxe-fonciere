@@ -2,6 +2,7 @@
 from __future__ import annotations
 import json
 from html import escape
+from classement_habitation import CLASSEMENT, CRITERES, libelle_categorie
 from pathlib import Path
 import streamlit as st
 from cadastre import adresses
@@ -128,16 +129,27 @@ elif etape == 2:
             st.caption('B · Terrasses et toitures-terrasses accessibles : surface séparée de la surface totale des pièces. Les garages et caves distincts ne relèvent pas de cette surface totale.')
             partie_professionnelle = st.checkbox('C · Le logement comporte une partie professionnelle', value=h2.get('partie_professionnelle', False), help='Reprend le cadre C du H2. La partie professionnelle doit être examinée séparément ; ne la comptez pas dans les surfaces affectées à l’habitation.')
             declaration_6660 = st.checkbox('Une déclaration 6660-REV a été souscrite pour cette partie', value=h2.get('declaration_6660', False), help='Information déclarative uniquement : cette case ne calcule pas la taxe de la partie professionnelle.')
-        with st.expander('Paramètres cadastraux — zone réservée à l’administration sur le H2', expanded=maison):
-            st.caption('Facultatif : reprenez ces valeurs uniquement si elles figurent sur votre fiche d’évaluation. À défaut, la catégorie reste inconnue et les correctifs neutres servent d’hypothèses de simulation.')
-            st.markdown('#### Classement cadastral')
-            ordre = sorted(CATEGORIES, key=lambda x: (int(x[0]), len(x)))
-            categories = [None] + ordre
-            categorie = st.selectbox('Catégorie cadastrale du logement', categories,
-                index=categories.index(saisie.get('categorie')),
-                format_func=lambda c: 'Je ne connais pas ma catégorie' if c is None else f'Catégorie {c}',
-                help='Reprenez le classement de la fiche d’évaluation cadastrale (6675). Les catégories vont de 1 à 8 ; M indique une catégorie intermédiaire. Ce classement fiscal ne se déduit pas du prix du logement ou de son DPE.')
-            st.caption('Catégorie inconnue : le résultat présentera les catégories et séries disponibles comme des scénarios, sans attribuer automatiquement un classement à votre bien.')
+        st.markdown('#### Catégorie cadastrale du logement')
+        st.caption('Reprenez d’abord la catégorie de votre fiche d’évaluation cadastrale. Si vous ne l’avez pas, utilisez l’aide ci-dessous pour choisir une catégorie indicative ; elle reste à confirmer par le service des impôts fonciers.')
+        ordre = sorted(CATEGORIES, key=lambda x: (int(x[0]), len(x)))
+        categories = [None] + ordre
+        categorie = st.selectbox('Catégorie cadastrale du logement', categories,
+            index=categories.index(saisie.get('categorie')),
+            format_func=libelle_categorie,
+            help='Choix obligatoire pour calculer. Reprenez la fiche cadastrale ou choisissez une hypothèse avec l’aide au classement. La fourchette comparera uniquement les séries publiées dans cette catégorie.')
+        with st.expander('M’aider à choisir la catégorie la plus pertinente', expanded=True):
+            st.markdown('**Les critères de classement à examiner ensemble**')
+            for critere, explication in CRITERES:
+                st.markdown(f'**{critere}** — {explication}')
+            st.table([{'Catégorie': k, 'Classement': v[0], 'Repères qualitatifs simplifiés': v[1]} for k,v in CLASSEMENT.items()])
+            st.caption('Référence : CGI, annexe III, article 324 H. Ces repères sont une aide de lecture et non la reproduction exhaustive du tableau réglementaire. Le classement s’apprécie par comparaison avec les locaux de référence de la commune.')
+            st.write('Examinez d’abord le niveau général de construction et de distribution, puis le confort et les équipements. Par exemple, les catégories 4, 5 et 6 distinguent un ensemble confortable, assez confortable ou ordinaire. La seule présence d’un chauffage ou d’une salle d’eau ne permet pas de trancher.')
+            st.caption('Ne déduisez pas la catégorie du prix de vente, du DPE ou d’un seul équipement. L’entretien et la situation du bien font l’objet de correctifs distincts : une dégradation ponctuelle ne suffit pas à reclasser le logement. Les catégories 1M à 7M sont intermédiaires entre deux catégories voisines.')
+        source_categorie = st.selectbox('Origine de la catégorie choisie', ['Choix indicatif avec l’aide au classement', 'Catégorie figurant sur ma fiche cadastrale'],
+            index=1 if saisie.get('categorie_confirmee') else 0,
+            help='Précisez si votre catégorie est documentée ou si elle constitue une hypothèse de simulation.')
+        with st.expander('Correctifs cadastraux — paramètres complémentaires', expanded=maison):
+            st.caption('Reprenez les correctifs de la fiche cadastrale si vous les connaissez. À défaut, les correctifs neutres restent des hypothèses de simulation, distinctes de la catégorie choisie.')
             st.markdown('#### État, situation et dépendances')
             st.caption('Ces correctifs décrivent l’état et la situation retenus pour l’évaluation cadastrale. Les valeurs proposées sont des hypothèses à vérifier sur votre fiche.')
             a, b = st.columns(2)
@@ -198,7 +210,7 @@ elif etape == 2:
         retour = a.form_submit_button('Retour au logement')
         suivant = b.form_submit_button('Vérifier mes informations', type='primary')
     if retour or suivant:
-        saisie.update(surface=surface, categorie=categorie, parametres={
+        saisie.update(surface=surface, categorie=categorie, categorie_confirmee=source_categorie == 'Catégorie figurant sur ma fiche cadastrale', parametres={
             'annexes': annexes, 'terrasse': terrasse, 'entretien': entretien,
             'situation_generale': sit_gen, 'situation_particuliere': sit_part,
             **quantites, **equipements,
@@ -211,6 +223,8 @@ elif etape == 2:
             aller(1)
         elif surface <= 0:
             st.error('Indiquez une surface réelle du logement supérieure à zéro.')
+        elif categorie is None:
+            st.error('Choisissez une catégorie cadastrale à l’aide des critères de classement, ou reprenez celle de votre fiche d’évaluation.')
         elif not maison and not sum(pieces_h2.values()):
             st.error('Renseignez au moins une pièce dans le cadre 41 du H2.')
         else:
@@ -225,7 +239,7 @@ else:
     if saisie.get('h2'):
         st.table([{'Consistance H2': H2_PIECES[k], 'Nombre': v} for k,v in saisie['h2']['pieces'].items()])
         st.write('Chauffage : ' + ('oui' if saisie['h2']['chauffage'] else 'non') + ' · Escalier de service : ' + ('oui' if saisie['h2']['escalier_service'] else 'non'))
-    st.write('Catégorie : **' + (saisie.get('categorie') or 'inconnue — exploration des scénarios disponibles') + '**')
+    st.write('Catégorie : **' + (libelle_categorie(saisie['categorie']) if saisie.get('categorie') else 'à choisir avant le calcul') + '**')
     with st.expander('Relire les correctifs et les équipements retenus'):
         st.write(f"Entretien : {params['entretien']} · Situation générale : {params['situation_generale']} · Situation particulière : {params['situation_particuliere']}")
         st.write({k: v for k, v in params.items() if k not in ('entretien', 'situation_generale', 'situation_particuliere')})
@@ -233,7 +247,7 @@ else:
     a, b = st.columns(2)
     if a.button('Modifier mes informations'):
         aller(2)
-    if b.button('Calculer mon estimation', type='primary'):
+    if b.button('Calculer mon estimation', type='primary', disabled=not saisie.get('categorie')):
         st.session_state.pop('hab_resultat', None)
         with st.spinner('Recherche des tarifs et des taux documentés…'):
             try:
@@ -252,6 +266,10 @@ else:
                 st.error('Estimation indisponible : ' + str(exc))
 
     r = st.session_state.get('hab_resultat')
+    if r and (not saisie.get('categorie') or r.get('categorie') != saisie.get('categorie')):
+        st.session_state.pop('hab_resultat', None)
+        r = None
+        st.info('La catégorie doit être choisie et le résultat recalculé. Utilisez « Modifier mes informations » pour préciser le classement.')
     if r:
         st.divider()
         st.markdown("""<style>
@@ -270,17 +288,27 @@ else:
             st.warning(reserve)
         for incident in r['incidents']:
             st.warning(incident)
-        if r['categorie_inconnue']:
-            st.warning('Catégorie non confirmée : ces scénarios explorent les catégories publiées. Leur intervalle n’est ni une prévision ni une attribution de catégorie à votre logement.')
-        if len(r['tarifs']) > 1:
-            st.info('Plusieurs scénarios sont disponibles selon la catégorie, la série ou l’hypothèse de chauffage. La fiche d’évaluation permet de confirmer les paramètres applicables.')
-            totals = [x['total'] for x in r['tarifs'] if 'total' in x]
+        if not r.get('categorie_confirmee'):
+            st.warning(f"Catégorie {r['categorie']} choisie à titre indicatif avec l’aide au classement : à confirmer sur la fiche d’évaluation cadastrale.")
+        scenarios = r['tarifs']
+        hypotheses = sorted({t['pieces_chauffage_scenario'] for t in scenarios if 'pieces_chauffage_scenario' in t})
+        if hypotheses:
+            hypothese = st.selectbox('Hypothèse de chauffage à examiner', hypotheses,
+                format_func=lambda n: f'{n} pièces desservies (hypothèse)',
+                help='Ce choix est distinct de la série tarifaire. La fourchette compare les séries pour une même catégorie et une même hypothèse de chauffage.')
+            scenarios = [t for t in scenarios if t.get('pieces_chauffage_scenario') == hypothese]
+        if len(scenarios) > 1:
+            st.info(f"Plusieurs séries tarifaires sont publiées dans la catégorie {r['categorie']}. La série exacte et son origine sont à confirmer sur votre fiche cadastrale.")
+            totals = [t['total'] for t in scenarios if 'total' in t]
             if totals:
-                st.write(f"**Étendue des scénarios disponibles : {fmt(min(totals))} à {fmt(max(totals))}**, hors frais, exonérations et dépendances distinctes.")
-        choice = st.selectbox('Scénario à examiner', range(len(r['tarifs'])),
-            format_func=lambda i: f"Catégorie {r['tarifs'][i]['categorie']} · Série {r['tarifs'][i]['serie']} · Origine {r['tarifs'][i]['origine'] or 'non précisée'} · {fmt(r['tarifs'][i]['tarif_1970'])}/m²" + (f" · chauffage : {r['tarifs'][i]['pieces_chauffage_scenario']} pièces (hypothèse)" if 'pieces_chauffage_scenario' in r['tarifs'][i] else ''),
-            help='Ce choix sert à examiner un scénario ; il ne confirme pas le classement cadastral de votre logement.')
-        x = r['tarifs'][choice]
+                st.write(f"**Fourchette des séries — catégorie {r['categorie']} : {fmt(min(totals))} à {fmt(max(totals))}**, à hypothèse de chauffage identique, hors frais, exonérations et dépendances distinctes.")
+            else:
+                bases = [t['base_tf'] for t in scenarios]
+                st.write(f"**Fourchette des bases TFPB — catégorie {r['categorie']} : {fmt(min(bases))} à {fmt(max(bases))}**. Les cotisations restent indisponibles faute de taux documentés.")
+        choice = st.selectbox('Scénario à examiner', range(len(scenarios)),
+            format_func=lambda i: f"Catégorie {scenarios[i]['categorie']} · Série {scenarios[i]['serie']} · Origine {scenarios[i]['origine'] or 'non précisée'} · {fmt(scenarios[i]['tarif_1970'])}/m²",
+            help='Choisissez une série de la catégorie retenue. Ce choix ne confirme pas son attribution au logement.')
+        x = scenarios[choice]
         if 'pieces_chauffage_scenario' in x:
             st.info(f"Hypothèse de ce scénario : {x['pieces_chauffage_scenario']} pièces desservies par le chauffage. Cette hypothèse n’est pas confirmée par la seule case du H2.")
         sp = x['surfaces']
@@ -340,7 +368,7 @@ else:
             st.write(r['facteur']['source_revalorisation'])
             st.table([{'Composante': LIBELLES[k], 'Taux (%)': v['taux'], 'Année source': v['annee_source'], 'Source': v.get('source', '')} for k, v in r['taux'].items() if v])
         dossier_pdf = {**r, 'categorie': x['categorie'], 'surfaces': sp,
-            'tarifs': [t for t in r['tarifs'] if t['categorie'] == x['categorie']]}
+            'tarifs': scenarios}
         dossier_pdf['serie_selectionnee'] = dossier_pdf['tarifs'].index(x)
         st.download_button('Télécharger le rapport PDF de ce scénario', data=generer_pdf_habitation(dossier_pdf),
             file_name=f"estimation_habitation_{r['annee']}_{r['code_insee']}.pdf", mime='application/pdf', use_container_width=True)

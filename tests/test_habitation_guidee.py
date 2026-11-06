@@ -45,12 +45,18 @@ class HabitationGuideeTests(unittest.TestCase):
         self.assertTrue(all('total' not in x for x in r['tarifs']))
         self.assertTrue(all('base_tf' in x for x in r['tarifs']))
 
-    def test_categorie_inconnue_ne_reprend_pas_une_surface_unique(self):
+    def test_categorie_obligatoire_et_series_limitees_a_la_categorie(self):
         self.saisie['categorie'] = None
+        with self.assertRaisesRegex(ValueError, 'Choisissez une catégorie'):
+            self.calculer()
+        self.saisie['categorie'] = '5'
         r = self.calculer()
-        self.assertTrue(r['categorie_inconnue'])
-        self.assertEqual({x['categorie'] for x in r['tarifs']}, {'5', '6'})
-        self.assertNotEqual(r['tarifs'][0]['surfaces']['surface_ponderee'], r['tarifs'][-1]['surfaces']['surface_ponderee'])
+        self.assertEqual({x['categorie'] for x in r['tarifs']}, {'5'})
+        self.assertEqual({x['serie'] for x in r['tarifs']}, {'A', 'B'})
+        self.assertNotEqual(r['tarifs'][0]['total'], r['tarifs'][1]['total'])
+        self.assertFalse(r['categorie_confirmee'])
+        self.saisie['categorie_confirmee'] = True
+        self.assertTrue(self.calculer()['categorie_confirmee'])
 
     def test_dependances_appartement_exclues_maison_ponderees(self):
         self.saisie['parametres'] = {'annexes': 20., 'terrasse': 10.}
@@ -72,7 +78,6 @@ class HabitationGuideeTests(unittest.TestCase):
             self.calculer()
 
     def test_pdf_du_scenario_selectionne(self):
-        self.saisie['categorie'] = None
         r = self.calculer()
         x = r['tarifs'][-1]
         dossier = {**r, 'categorie': x['categorie'], 'surfaces': x['surfaces'],

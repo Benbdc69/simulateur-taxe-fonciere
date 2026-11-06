@@ -52,9 +52,9 @@ def calculer_scenarios(saisie, adresse, referentiel, tarifs):
     taux = {k: r['taux'] for k, r in rates.items() if r and r.get('taux') is not None}
     complet = all(k in taux for k in COMPOSANTES)
     categorie = saisie.get('categorie')
-    if categorie is not None and categorie not in CATEGORIES:
-        raise ValueError('Catégorie cadastrale inconnue.')
-    categories = [categorie] if categorie else sorted(CATEGORIES, key=lambda x: (int(x[0]), len(x)))
+    if categorie not in CATEGORIES:
+        raise ValueError('Choisissez une catégorie cadastrale avant de calculer.')
+    categories = [categorie]
     h2 = saisie.get('h2') if saisie['nature'] == 'A' else None
     hypotheses = hypotheses_chauffage_h2(h2) if h2 is not None else [None]
     reserves = []
@@ -84,7 +84,8 @@ def calculer_scenarios(saisie, adresse, referentiel, tarifs):
                          + (f' en catégorie {categorie}.' if categorie else '.'))
     return {'adresse': adresse['libelle'], 'code_insee': code, 'annee': annee,
             'nature': 'Maison (H1)' if saisie['nature'] == 'M' else 'Appartement (H2)',
-            'categorie_inconnue': categorie is None, 'facteur': facteur,
+            'categorie': categorie, 'categorie_inconnue': False,
+            'categorie_confirmee': bool(saisie.get('categorie_confirmee')), 'facteur': facteur,
             'surface_reelle': saisie['surface'],
             'terrasse_reelle': saisie['parametres'].get('terrasse', 0),
             'autres_dependances': saisie['parametres'].get('annexes', 0),

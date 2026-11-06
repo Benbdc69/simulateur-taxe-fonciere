@@ -38,8 +38,8 @@ class ParcoursGuidesUI(unittest.TestCase):
         adr = {'libelle': '18 cours Gambetta, 69007 Lyon', 'commune': 'Lyon', 'insee': '69387', 'code_postal': '69007'}
         rates = {k: {'taux': 30 if k == 'commune' else 0, 'annee_source': 2026,
                      'source': 'Fixture', 'zonage_confirme': True} for k in COMPOSANTES}
-        rows = [dict(insee='69387', nature='A', categorie=c, serie='A', origine='387', tarif_1970=t, annee_tarif=2024)
-                for c, t in [('5', 10.), ('6', 8.)]]
+        rows = [dict(insee='69387', nature='A', categorie=c, serie=serie, origine='387', tarif_1970=t, annee_tarif=2024)
+                for c, serie, t in [('5', 'A', 10.), ('5', 'B', 12.), ('6', 'A', 8.)]]
         with patch('cadastre.adresses', return_value=[adr]) as geo, \
              patch('tarifs_habitation.tarifs_nationaux', return_value=rows) as tarifs, \
              patch('historique_taux.resoudre_tout', return_value=rates), \
@@ -66,19 +66,33 @@ class ParcoursGuidesUI(unittest.TestCase):
             champ(at.number_input, 'Surface totale des pièces et annexes affectées à l’habitation (m²)').set_value(45.)
             champ(at.number_input, 'Garage, cave, grenier et autres dépendances (m²)').set_value(12.)
             champ(at.button, 'Vérifier mes informations').click().run()
+            self.assertEqual(at.session_state['hab_etape'], 2)
+            self.assertTrue(any('Choisissez une catégorie' in x.value for x in at.error))
+            self.assertIn('M’aider à choisir la catégorie la plus pertinente', [x.label for x in at.expander])
+            champ(at.selectbox, 'Catégorie cadastrale du logement').select('5')
+            champ(at.button, 'Vérifier mes informations').click().run()
             self.assertEqual(at.session_state['hab_etape'], 3)
             tarifs.assert_not_called()
             champ(at.button, 'Calculer mon estimation').click().run()
             self.assertFalse(at.exception, [str(x.value) for x in at.exception])
             self.assertEqual(len(at.session_state['hab_resultat']['tarifs']), 4)
-            self.assertTrue(any('non confirmée' in x.value for x in at.warning))
+            self.assertTrue(any('à confirmer' in x.value for x in at.warning))
             self.assertTrue(any('Estimation partielle' in x.value for x in at.warning))
-            champ(at.selectbox, 'Scénario à examiner').select(3).run()
+            champ(at.selectbox, 'Hypothèse de chauffage à examiner').select(4).run()
+            champ(at.selectbox, 'Scénario à examiner').select(1).run()
             self.assertFalse(at.exception)
-            self.assertEqual(at.session_state['hab_resultat']['tarifs'][3]['categorie'], '6')
+            self.assertEqual(at.session_state['hab_resultat']['tarifs'][3]['categorie'], '5')
             cartes = [x.value for x in at.markdown if 'hab-result-card hab-tax-card' in x.value]
             self.assertEqual(len(cartes), 6)
             self.assertTrue(any('Cotisations annuelles estimées' in x.value for x in at.markdown))
+            self.assertTrue(any('Fourchette des séries — catégorie 5' in x.value for x in at.markdown))
+            self.assertEqual(len(champ(at.selectbox, 'Scénario à examiner').options), 2)
+            comparables = [x for x in at.session_state['hab_resultat']['tarifs'] if x['pieces_chauffage_scenario'] == 4]
+            euro = lambda n: f'{n:,.2f}'.replace(',', ' ').replace('.', ',') + ' €'
+            fourchette = next(x.value for x in at.markdown if 'Fourchette des séries — catégorie 5' in x.value)
+            self.assertIn(euro(min(x['total'] for x in comparables)), fourchette)
+            self.assertIn(euro(max(x['total'] for x in comparables)), fourchette)
+            self.assertEqual({x['categorie'] for x in at.session_state['hab_resultat']['tarifs']}, {'5'})
             self.assertTrue(any('Intercommunalité' in x for x in cartes))
             self.assertFalse(next(x for x in at.expander if x.label == 'Comprendre le calcul, étape par étape').proto.expanded)
             self.assertEqual(at.session_state['hab_resultat']['h2']['pieces']['chambres'], 2)

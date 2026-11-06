@@ -74,10 +74,19 @@ def generer_pdf_habitation(d):
                               ('FONTNAME',(0,-1),(-1,-1),'Helvetica-Bold'),('TEXTCOLOR',(0,-1),(-1,-1),BLUE),
                               ('FONTSIZE',(0,0),(-1,-1),9),('BOTTOMPADDING',(0,0),(-1,-1),6)]))
         story.append(t)
+    comparables = [x for x in d['tarifs'] if x.get('categorie', d['categorie']) == chosen.get('categorie', d['categorie'])
+                   and x.get('pieces_chauffage_scenario') == chosen.get('pieces_chauffage_scenario')]
+    if len({(x['serie'], x.get('origine')) for x in comparables}) > 1:
+        cle = 'total' if all('total' in x for x in comparables) else 'base_tf'
+        label = 'cotisations hors frais et exonérations' if cle == 'total' else 'bases TFPB, cotisations indisponibles'
+        valeurs = [x[cle] for x in comparables]
+        story.append(Paragraph('Fourchette des séries de la catégorie '+ph(d['categorie'])+' : '+eur(min(valeurs))+' à '+eur(max(valeurs))+' ('+ph(label)+', à hypothèse de chauffage identique).',st['AxNormalH']))
     story.append(Paragraph('Périmètre et réserves',st['AxHeadH']))
     notes=list(d.get('reserves_h2', []))
     if 'pieces_chauffage_scenario' in chosen:
         notes.append(f"Scénario sélectionné : hypothèse de {chosen['pieces_chauffage_scenario']} pièces desservies par le chauffage ; ce nombre n’est pas confirmé par la case chauffage du H2.")
+    if not d.get('categorie_confirmee'):
+        notes.append('Catégorie choisie à titre indicatif avec l’aide au classement : elle ne constitue pas un classement confirmé par l’administration. À vérifier sur la fiche cadastrale.')
     if d.get('categorie_inconnue'):
         notes.append('Catégorie cadastrale inconnue : ce rapport détaille un scénario exploratoire sélectionné, et ne confirme pas le classement du logement. D’autres catégories peuvent être disponibles dans le simulateur.')
     if len({(x['serie'],x.get('origine')) for x in d['tarifs']})>1:notes.append('Plusieurs séries de tarifs : la série exacte du local doit être confirmée dans la fiche cadastrale.')

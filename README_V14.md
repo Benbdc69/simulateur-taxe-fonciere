@@ -36,9 +36,10 @@ invalide le résultat précédent. Le périmètre d’imposition est limité à 
 
 Le parcours habitation comporte trois étapes : recherche et confirmation de
 l’adresse, surfaces et équipements, vérification puis estimation. Les saisies
-sont conservées lors du retour à une étape précédente. Une catégorie inconnue
-ouvre les scénarios publiés disponibles, sans attribuer de classement au bien.
-Chaque catégorie conserve sa propre surface pondérée. Le détail du calcul,
+sont conservées lors du retour à une étape précédente. La catégorie est visible et obligatoire avant de calculer. Une aide qualitative
+présente les huit catégories et les critères de classement (CGI, annexe III,
+article 324 H). Le choix est identifié comme indicatif ou issu de la fiche cadastrale.
+Aucune fourchette entre catégories différentes n’est calculée. Le détail du calcul,
 les taux manquants ou antérieurs et le zonage TEOM non confirmé sont affichés ;
 le PDF reprend la catégorie du scénario sélectionné. Les dépendances distinctes
 d’appartement restent hors du chiffrage de la partie principale.
@@ -71,3 +72,15 @@ annuel sur le périmètre simulé, trois indicateurs de synthèse et répartitio
 taxe avec base, taux et millésime. Le calcul détaillé et les sources restent dans
 des volets dépliables. Si des taux manquent, la carte principale affiche la valeur
 locative et précise qu’il ne s’agit pas d’une cotisation.
+
+### Catégorie et fourchette des séries
+
+La catégorie doit être sélectionnée dans le parcours principal. Les repères
+simplifiés couvrent architecture, construction, distribution et confort ; ils
+ne remplacent pas le classement par comparaison avec les locaux de référence
+communaux. Les catégories intermédiaires restent disponibles.
+
+Lorsque plusieurs séries existent dans la catégorie choisie, la fourchette
+concerne uniquement ces séries pour une même hypothèse de chauffage. L’hypothèse
+de chauffage se choisit séparément. Le PDF conserve ce même périmètre. Sans taux
+complets, la fourchette porte sur les bases TFPB, sans inventer de cotisations.
