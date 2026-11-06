@@ -63,6 +63,7 @@ class ParcoursGuidesUI(unittest.TestCase):
             champ(at.number_input, 'Chambres et autres pièces habitables').set_value(2)
             champ(at.number_input, 'Cuisines de moins de 9 m²').set_value(1)
             champ(at.checkbox, 'Chauffage ou climatisation dans les DOM').check()
+            champ(at.number_input, 'Nombre de pièces chauffées').set_value(2)
             champ(at.number_input, 'Surface totale des pièces et annexes affectées à l’habitation (m²)').set_value(45.)
             champ(at.number_input, 'Garage, cave, grenier et autres dépendances (m²)').set_value(12.)
             champ(at.button, 'Vérifier mes informations').click().run()
@@ -75,23 +76,20 @@ class ParcoursGuidesUI(unittest.TestCase):
             tarifs.assert_not_called()
             champ(at.button, 'Calculer mon estimation').click().run()
             self.assertFalse(at.exception, [str(x.value) for x in at.exception])
-            self.assertEqual(len(at.session_state['hab_resultat']['tarifs']), 4)
+            self.assertEqual(len(at.session_state['hab_resultat']['tarifs']), 2)
             self.assertTrue(any('à confirmer' in x.value for x in at.warning))
             self.assertTrue(any('Estimation partielle' in x.value for x in at.warning))
-            self.assertEqual(champ(at.selectbox, 'Hypothèse de chauffage à examiner').value, 4)
-            self.assertTrue(any('4 × 2 m² = +8 m²' in x.value for x in at.info))
-            champ(at.selectbox, 'Hypothèse de chauffage à examiner').select(0).run()
-            self.assertTrue(any('0 × 2 m² = +0 m²' in x.value for x in at.info))
-            champ(at.selectbox, 'Hypothèse de chauffage à examiner').select(4).run()
+            self.assertNotIn('Hypothèse de chauffage à examiner', [x.label for x in at.selectbox])
+            self.assertTrue(any('2 × 2 m² = +4 m²' in x.value for x in at.info))
             champ(at.selectbox, 'Scénario à examiner').select(1).run()
             self.assertFalse(at.exception)
-            self.assertEqual(at.session_state['hab_resultat']['tarifs'][3]['categorie'], '5')
+            self.assertEqual(at.session_state['hab_resultat']['tarifs'][1]['categorie'], '5')
             cartes = [x.value for x in at.markdown if 'hab-result-card hab-tax-card' in x.value]
             self.assertEqual(len(cartes), 6)
             self.assertTrue(any('Cotisations annuelles estimées' in x.value for x in at.markdown))
             self.assertTrue(any('Fourchette des séries — catégorie 5' in x.value for x in at.markdown))
             self.assertEqual(len(champ(at.selectbox, 'Scénario à examiner').options), 2)
-            comparables = [x for x in at.session_state['hab_resultat']['tarifs'] if x['pieces_chauffage_scenario'] == 4]
+            comparables = [x for x in at.session_state['hab_resultat']['tarifs'] if x['pieces_chauffage_scenario'] == 2]
             euro = lambda n: f'{n:,.2f}'.replace(',', ' ').replace('.', ',') + ' €'
             fourchette = next(x.value for x in at.markdown if 'Fourchette des séries — catégorie 5' in x.value)
             self.assertIn(euro(min(x['total'] for x in comparables)), fourchette)
@@ -100,7 +98,7 @@ class ParcoursGuidesUI(unittest.TestCase):
             self.assertTrue(any('Intercommunalité' in x for x in cartes))
             self.assertFalse(next(x for x in at.expander if x.label == 'Comprendre le calcul, étape par étape').proto.expanded)
             self.assertEqual(at.session_state['hab_resultat']['h2']['pieces']['chambres'], 2)
-            self.assertEqual(at.session_state['hab_resultat']['tarifs'][3]['pieces_chauffage_scenario'], 4)
+            self.assertEqual(at.session_state['hab_resultat']['tarifs'][1]['pieces_chauffage_scenario'], 2)
             sync.assert_not_called()
             tarifs.assert_called_once()
             champ(at.button, 'Modifier mes informations').click().run()
@@ -109,6 +107,7 @@ class ParcoursGuidesUI(unittest.TestCase):
             self.assertEqual(champ(at.number_input, 'Garage, cave, grenier et autres dépendances (m²)').value, 12.)
             self.assertEqual(champ(at.number_input, 'Chambres et autres pièces habitables').value, 2)
             self.assertTrue(champ(at.checkbox, 'Chauffage ou climatisation dans les DOM').value)
+            self.assertEqual(champ(at.number_input, 'Nombre de pièces chauffées').value, 2)
 
     def test_resultat_incomplet_affiche_valeur_locative_sans_cotisations(self):
         from dossier_habitation import calculer_scenarios

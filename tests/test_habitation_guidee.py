@@ -84,19 +84,26 @@ class HabitationGuideeTests(unittest.TestCase):
                    'tarifs': [x], 'serie_selectionnee': 0, 'source_tarifs': SOURCE}
         self.assertTrue(generer_pdf_habitation(dossier).startswith(b'%PDF'))
 
-    def test_h2_chauffage_preserve_incertitude_et_ne_reutilise_pas_ancienne_saisie(self):
+    def test_h2_nombre_chauffe_libre_sans_comptage_automatique(self):
         self.saisie['h2'] = {'pieces': {'reception': 1, 'chambres': 2, 'cuisines_moins_9': 1,
-                                      'salles_eau': 1, 'autres_annexes': 1}, 'chauffage': True}
+                                      'salles_eau': 1, 'autres_annexes': 1}, 'chauffage': True, 'pieces_chauffees': 3}
         self.saisie['parametres']['pieces_chauffees'] = 99
         r = self.calculer()
-        self.assertEqual(len(r['tarifs']), 4)
-        a, b = r['tarifs'][0], r['tarifs'][2]
-        self.assertEqual(a['pieces_chauffage_scenario'], 0)
-        self.assertEqual(b['pieces_chauffage_scenario'], 6)
-        self.assertEqual(b['surfaces']['surface_ponderee'] - a['surfaces']['surface_ponderee'], 12)
-        self.assertTrue(r['reserves_h2'])
-        dossier = {**r, 'categorie': '5', 'surfaces': b['surfaces'], 'serie_selectionnee': 2, 'source_tarifs': SOURCE}
+        self.assertEqual(len(r['tarifs']), 2)
+        x = r['tarifs'][0]
+        self.assertEqual(x['pieces_chauffage_scenario'], 3)
+        self.assertEqual(x['surfaces']['detail_confort']['Pièces chauffées admissibles'], 6)
+        self.assertEqual(x['surfaces']['surface_ponderee'], 74)
+        self.saisie['h2']['pieces_chauffees'] = 1
+        self.assertEqual(self.calculer()['tarifs'][0]['surfaces']['surface_ponderee'], 70)
+        dossier = {**r, 'categorie': '5', 'surfaces': x['surfaces'], 'serie_selectionnee': 0, 'source_tarifs': SOURCE}
         self.assertTrue(generer_pdf_habitation(dossier).startswith(b'%PDF'))
+
+    def test_h2_nombre_chauffe_non_deduit_si_manquant(self):
+        for valeur in [None, -1, 1.5, float('nan')]:
+            with self.subTest(valeur=valeur), self.assertRaises(ValueError):
+                self.saisie['h2'] = {'pieces': {'chambres': 3}, 'chauffage': True, 'pieces_chauffees': valeur}
+                self.calculer()
 
     def test_h2_sans_chauffage_aucune_equivalence_ajoutee(self):
         self.saisie['h2'] = {'pieces': {'reception': 1}, 'chauffage': False,

@@ -16,11 +16,7 @@ H2_PIECES = {
 
 
 def hypotheses_chauffage_h2(h2):
-    """Le H2 décrit la consistance et la présence, pas la desserte du chauffage.
-
-    Les bornes sont des hypothèses de sensibilité du moteur existant (2 m²
-    par pièce desservie), pas un classement ni une règle d'affectation automatique.
-    """
+    """Conserve le nombre librement déclaré, sans le déduire de la consistance."""
     pieces = h2.get('pieces', {})
     if set(pieces) - set(H2_PIECES):
         raise ValueError('Rubrique de consistance H2 inconnue.')
@@ -32,7 +28,15 @@ def hypotheses_chauffage_h2(h2):
         total += int(n)
     if not total:
         raise ValueError('Renseignez au moins une pièce dans le cadre 41 du H2.')
-    return [0, total] if h2.get('chauffage') else [0]
+    nombre = h2.get('pieces_chauffees')
+    if nombre is None and h2.get('chauffage'):
+        raise ValueError('Renseignez le nombre de pièces chauffées.')
+    n = float(nombre or 0)
+    if isinstance(nombre, bool) or not isfinite(n) or n < 0 or not n.is_integer():
+        raise ValueError('Le nombre de pièces chauffées doit être un entier positif ou nul.')
+    if not h2.get('chauffage') and n:
+        raise ValueError('Cochez le chauffage ou indiquez zéro pièce chauffée.')
+    return [int(n)]
 
 
 def code_adresse(adresse):
@@ -59,8 +63,6 @@ def calculer_scenarios(saisie, adresse, referentiel, tarifs):
     hypotheses = hypotheses_chauffage_h2(h2) if h2 is not None else [None]
     reserves = []
     if h2 is not None:
-        if h2.get('chauffage'):
-            reserves.append('Chauffage déclaré au H2 : la desserte des pièces n’est pas précisée. Les scénarios sans équivalence chauffage et avec toutes les pièces déclarées desservies sont des hypothèses de sensibilité, à confirmer sur la fiche cadastrale.')
         if h2.get('partie_professionnelle'):
             reserves.append('Local mixte : seule la surface affectée à l’habitation est simulée. La partie professionnelle et sa déclaration 6660-REV doivent être traitées séparément.')
         if h2.get('escalier_service'):

@@ -50,7 +50,7 @@ def generer_pdf_habitation(d):
     h=Table([[Paragraph('<b>Série</b>',st['AxNormalH']),Paragraph('<b>Tarif 1970/m²</b>',st['AxNormalH']),
               Paragraph('<b>VL 1970</b>',st['AxNormalH']),Paragraph('<b>VL année</b>',st['AxNormalH']),
               Paragraph('<b>Base TFPB</b>',st['AxNormalH']),Paragraph('<b>Sous-total*</b>',st['AxNormalH'])]]+
-          [[Paragraph(ph(x['serie'])+' / '+ph(x.get('origine') or '—') + (f"<br/>Chauffage : {x['pieces_chauffage_scenario']} pièces (hyp.)" if 'pieces_chauffage_scenario' in x else ''),st['AxTinyH']),eur(x['tarif_1970']),eur(x['vl_1970']),
+          [[Paragraph(ph(x['serie'])+' / '+ph(x.get('origine') or '—') + (f"<br/>Chauffage : {x['pieces_chauffage_scenario']} pièces déclarées" if 'pieces_chauffage_scenario' in x else ''),st['AxTinyH']),eur(x['tarif_1970']),eur(x['vl_1970']),
             eur(x.get('vl_annee',0)),eur(x.get('base_tf',0)),eur(x['total']) if 'total' in x else 'Non calculé']
            for x in d['tarifs'][:16]],colWidths=[2.65*cm,2.45*cm,2.45*cm,2.45*cm,2.45*cm,3.0*cm],repeatRows=1)
     h.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,0),PALE),('TEXTCOLOR',(0,0),(-1,0),BLUE),
@@ -80,11 +80,11 @@ def generer_pdf_habitation(d):
         cle = 'total' if all('total' in x for x in comparables) else 'base_tf'
         label = 'cotisations hors frais et exonérations' if cle == 'total' else 'bases TFPB, cotisations indisponibles'
         valeurs = [x[cle] for x in comparables]
-        story.append(Paragraph('Fourchette des séries de la catégorie '+ph(d['categorie'])+' : '+eur(min(valeurs))+' à '+eur(max(valeurs))+' ('+ph(label)+', à hypothèse de chauffage identique).',st['AxNormalH']))
+        story.append(Paragraph('Fourchette des séries de la catégorie '+ph(d['categorie'])+' : '+eur(min(valeurs))+' à '+eur(max(valeurs))+' ('+ph(label)+', pour le nombre de pièces chauffées déclaré).',st['AxNormalH']))
     story.append(Paragraph('Périmètre et réserves',st['AxHeadH']))
     notes=list(d.get('reserves_h2', []))
     if 'pieces_chauffage_scenario' in chosen:
-        notes.append(f"Chauffage : {chosen['pieces_chauffage_scenario']} pièces et annexes supposées desservies x 2 m² = +{2*chosen['pieces_chauffage_scenario']} m² d’équivalence, ajoutés à la surface nette avant application du tarif. La desserte est une hypothèse, non confirmée par la seule case chauffage du H2.")
+        notes.append(f"Chauffage : {chosen['pieces_chauffage_scenario']} pièces et annexes déclarées chauffées x 2 m² = +{2*chosen['pieces_chauffage_scenario']} m² d’équivalence, ajoutés à la surface nette avant application du tarif. Le nombre est saisi par l’utilisateur ; aucun comptage automatique n’est effectué.")
     if not d.get('categorie_confirmee'):
         notes.append('Catégorie choisie à titre indicatif avec l’aide au classement : elle ne constitue pas un classement confirmé par l’administration. À vérifier sur la fiche cadastrale.')
     if d.get('categorie_inconnue'):

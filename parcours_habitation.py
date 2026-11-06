@@ -203,9 +203,10 @@ elif etape == 2:
         ascenseur = False
         if not maison:
             chauffage = st.checkbox('Chauffage ou climatisation dans les DOM', value=h2.get('chauffage', False), help='Case 6 du cadre 42 du H2. Cochez selon l’équipement du logement. Le référentiel de calcul actuel est limité à la métropole ; les DOM ne sont pas chiffrés.')
+            pieces_chauffees_h2 = st.number_input('Nombre de pièces chauffées', min_value=0, value=int(h2.get('pieces_chauffees', 0)), step=1, help='Saisissez vous-même le nombre de pièces et annexes desservies par le chauffage. Le simulateur ne le déduit pas du nombre total de pièces. Chaque pièce déclarée ajoute 2 m² d’équivalence. Indiquez 0 en l’absence de chauffage.')
             ascenseur = st.checkbox('Ascenseur', value=params.get('ascenseur', False), help='Case 8 du cadre 42 : présence d’un ascenseur desservant le logement.')
             escalier_service = st.checkbox('Escalier de service', value=h2.get('escalier_service', False), help='Case 9 du cadre 42. Cette information est conservée dans le dossier ; aucun coefficient supplémentaire n’est inventé.')
-            st.caption('La case chauffage ne précise pas combien de pièces sont desservies. Si elle est cochée, le résultat explorera les hypothèses sans équivalence chauffage et avec toutes les pièces déclarées desservies. Ce ne sont pas deux évaluations cadastrales confirmées.')
+            st.caption('La majoration sera de 2 m² × le nombre de pièces chauffées que vous saisissez. Aucun comptage automatique n’est effectué.')
         a, b = st.columns(2)
         retour = a.form_submit_button('Retour au logement')
         suivant = b.form_submit_button('Vérifier mes informations', type='primary')
@@ -218,13 +219,15 @@ elif etape == 2:
         if maison:
             saisie.pop('h2', None)
         else:
-            saisie['h2'] = {'pieces': pieces_h2, 'chauffage': chauffage, 'escalier_service': escalier_service, 'partie_professionnelle': partie_professionnelle, 'declaration_6660': declaration_6660}
+            saisie['h2'] = {'pieces': pieces_h2, 'chauffage': chauffage, 'pieces_chauffees': pieces_chauffees_h2, 'escalier_service': escalier_service, 'partie_professionnelle': partie_professionnelle, 'declaration_6660': declaration_6660}
         if retour:
             aller(1)
         elif surface <= 0:
             st.error('Indiquez une surface réelle du logement supérieure à zéro.')
         elif categorie is None:
             st.error('Choisissez une catégorie cadastrale à l’aide des critères de classement, ou reprenez celle de votre fiche d’évaluation.')
+        elif not maison and not chauffage and pieces_chauffees_h2 > 0:
+            st.error('Cochez le chauffage ou indiquez zéro pièce chauffée.')
         elif not maison and not sum(pieces_h2.values()):
             st.error('Renseignez au moins une pièce dans le cadre 41 du H2.')
         else:
@@ -238,7 +241,7 @@ else:
     st.write(f"Surface réelle : **{saisie['surface']:g} m²** · Terrasse : **{params['terrasse']:g} m²** · Dépendances : **{params['annexes']:g} m²**")
     if saisie.get('h2'):
         st.table([{'Consistance H2': H2_PIECES[k], 'Nombre': v} for k,v in saisie['h2']['pieces'].items()])
-        st.write('Chauffage : ' + ('oui' if saisie['h2']['chauffage'] else 'non') + ' · Escalier de service : ' + ('oui' if saisie['h2']['escalier_service'] else 'non'))
+        st.write('Pièces chauffées déclarées : ' + str(saisie['h2'].get('pieces_chauffees', 0)) + ' · Chauffage : ' + ('oui' if saisie['h2']['chauffage'] else 'non') + ' · Escalier de service : ' + ('oui' if saisie['h2']['escalier_service'] else 'non'))
     st.write('Catégorie : **' + (libelle_categorie(saisie['categorie']) if saisie.get('categorie') else 'à choisir avant le calcul') + '**')
     with st.expander('Relire les correctifs et les équipements retenus'):
         st.write(f"Entretien : {params['entretien']} · Situation générale : {params['situation_generale']} · Situation particulière : {params['situation_particuliere']}")
@@ -291,17 +294,11 @@ else:
         if not r.get('categorie_confirmee'):
             st.warning(f"Catégorie {r['categorie']} choisie à titre indicatif avec l’aide au classement : à confirmer sur la fiche d’évaluation cadastrale.")
         scenarios = r['tarifs']
-        hypotheses = sorted({t['pieces_chauffage_scenario'] for t in scenarios if 'pieces_chauffage_scenario' in t})
-        if hypotheses:
-            hypothese = st.selectbox('Hypothèse de chauffage à examiner', hypotheses, index=len(hypotheses)-1,
-                format_func=lambda n: f'{n} pièces desservies (hypothèse)',
-                help='Ce choix est distinct de la série tarifaire. La fourchette compare les séries pour une même catégorie et une même hypothèse de chauffage.')
-            scenarios = [t for t in scenarios if t.get('pieces_chauffage_scenario') == hypothese]
         if len(scenarios) > 1:
             st.info(f"Plusieurs séries tarifaires sont publiées dans la catégorie {r['categorie']}. La série exacte et son origine sont à confirmer sur votre fiche cadastrale.")
             totals = [t['total'] for t in scenarios if 'total' in t]
             if totals:
-                st.write(f"**Fourchette des séries — catégorie {r['categorie']} : {fmt(min(totals))} à {fmt(max(totals))}**, à hypothèse de chauffage identique, hors frais, exonérations et dépendances distinctes.")
+                st.write(f"**Fourchette des séries — catégorie {r['categorie']} : {fmt(min(totals))} à {fmt(max(totals))}**, pour le nombre de pièces chauffées déclaré, hors frais, exonérations et dépendances distinctes.")
             else:
                 bases = [t['base_tf'] for t in scenarios]
                 st.write(f"**Fourchette des bases TFPB — catégorie {r['categorie']} : {fmt(min(bases))} à {fmt(max(bases))}**. Les cotisations restent indisponibles faute de taux documentés.")
@@ -310,7 +307,7 @@ else:
             help='Choisissez une série de la catégorie retenue. Ce choix ne confirme pas son attribution au logement.')
         x = scenarios[choice]
         if 'pieces_chauffage_scenario' in x:
-            st.info(f"Chauffage pris en compte : {x['pieces_chauffage_scenario']} × 2 m² = +{2*x['pieces_chauffage_scenario']} m² d’équivalence de surface. Cette majoration s’ajoute à la surface nette avant application du tarif cadastral. Le scénario suppose que ce nombre de pièces et annexes déclarées est desservi ; la case chauffage du H2 ne confirme pas à elle seule cette desserte.")
+            st.info(f"Chauffage pris en compte : {x['pieces_chauffage_scenario']} × 2 m² = +{2*x['pieces_chauffage_scenario']} m² d’équivalence de surface. Cette majoration s’ajoute à la surface nette avant application du tarif cadastral. Le nombre de pièces chauffées est celui que vous avez saisi, sans déduction automatique.")
         sp = x['surfaces']
         if sp['dependances_a_evaluer_separement']:
             st.warning('Estimation partielle : terrasse et/ou dépendances d’appartement sont signalées mais non chiffrées. Les montants portent sur la partie principale uniquement.')

@@ -60,12 +60,11 @@ l’escalier de service. La rubrique sanitaire regroupe les lavabos et les évie
 Les correctifs et le classement réservés à l’administration sont regroupés
 dans un volet facultatif.
 
-Le H2 ne détaille pas la desserte du chauffage : lorsque la case est cochée,
-deux hypothèses de sensibilité sont conservées (aucune équivalence chauffage,
-ou toutes les pièces et annexes déclarées desservies), selon le moteur existant.
-Ces hypothèses sont identifiées à l’écran et dans le PDF ; elles ne constituent
-pas une évaluation cadastrale confirmée. L’escalier de service est conservé sans
-correctif automatique. La partie professionnelle demeure hors du calcul habitation.
+Le nombre de pièces chauffées est saisi librement par l’utilisateur. Le moteur
+applique uniquement 2 m² d’équivalence par pièce déclarée chauffée. Aucun nombre
+n’est déduit de la consistance H2 et aucun scénario automatique zéro/toutes les
+pièces n’est généré. L’escalier de service est conservé sans correctif automatique.
+La partie professionnelle demeure hors du calcul habitation.
 
 Le résultat habitation reprend les cartes du parcours professionnel : montant
 annuel sur le périmètre simulé, trois indicateurs de synthèse et répartition par
@@ -81,12 +80,8 @@ ne remplacent pas le classement par comparaison avec les locaux de référence
 communaux. Les catégories intermédiaires restent disponibles.
 
 Lorsque plusieurs séries existent dans la catégorie choisie, la fourchette
-concerne uniquement ces séries pour une même hypothèse de chauffage. L’hypothèse
-de chauffage se choisit séparément. Le PDF conserve ce même périmètre. Sans taux
+concerne uniquement ces séries pour le même nombre de pièces chauffées déclaré. Le PDF conserve ce même périmètre. Sans taux
 complets, la fourchette porte sur les bases TFPB, sans inventer de cotisations.
 
-Lorsque le chauffage H2 est déclaré, le scénario affiché par défaut suppose
-que toutes les pièces et annexes déclarées sont desservies. La majoration
-« nombre × 2 m² » est explicitée dans le résultat et le PDF. L’hypothèse sans
-équivalence reste accessible séparément ; la desserte doit être confirmée
-sur le dossier cadastral. Ces m² sont des équivalences, pas de la surface réelle.
+Le résultat et le PDF explicitent la majoration chauffage : nombre de pièces
+chauffées saisi × 2 m². Ces m² sont des équivalences, pas de la surface réelle.
