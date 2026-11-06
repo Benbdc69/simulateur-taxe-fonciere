@@ -79,6 +79,35 @@ class HabitationGuideeTests(unittest.TestCase):
                    'tarifs': [x], 'serie_selectionnee': 0, 'source_tarifs': SOURCE}
         self.assertTrue(generer_pdf_habitation(dossier).startswith(b'%PDF'))
 
+    def test_h2_chauffage_preserve_incertitude_et_ne_reutilise_pas_ancienne_saisie(self):
+        self.saisie['h2'] = {'pieces': {'reception': 1, 'chambres': 2, 'cuisines_moins_9': 1,
+                                      'salles_eau': 1, 'autres_annexes': 1}, 'chauffage': True}
+        self.saisie['parametres']['pieces_chauffees'] = 99
+        r = self.calculer()
+        self.assertEqual(len(r['tarifs']), 4)
+        a, b = r['tarifs'][0], r['tarifs'][2]
+        self.assertEqual(a['pieces_chauffage_scenario'], 0)
+        self.assertEqual(b['pieces_chauffage_scenario'], 6)
+        self.assertEqual(b['surfaces']['surface_ponderee'] - a['surfaces']['surface_ponderee'], 12)
+        self.assertTrue(r['reserves_h2'])
+        dossier = {**r, 'categorie': '5', 'surfaces': b['surfaces'], 'serie_selectionnee': 2, 'source_tarifs': SOURCE}
+        self.assertTrue(generer_pdf_habitation(dossier).startswith(b'%PDF'))
+
+    def test_h2_sans_chauffage_aucune_equivalence_ajoutee(self):
+        self.saisie['h2'] = {'pieces': {'reception': 1}, 'chauffage': False,
+                             'escalier_service': True, 'partie_professionnelle': True}
+        self.saisie['parametres']['pieces_chauffees'] = 99
+        r = self.calculer()
+        self.assertEqual(len(r['tarifs']), 2)
+        self.assertEqual(r['tarifs'][0]['surfaces']['detail_confort']['Pièces chauffées admissibles'], 0)
+        self.assertEqual(len(r['reserves_h2']), 2)
+
+    def test_h2_nombre_de_pieces_requis_et_entier(self):
+        for pieces in [{}, {'chambres': 0}, {'chambres': 1.5}, {'chambres': -1}, {'chambres': float('nan')}]:
+            with self.subTest(pieces=pieces), self.assertRaises(ValueError):
+                self.saisie['h2'] = {'pieces': pieces, 'chauffage': True}
+                self.calculer()
+
     def test_quantites_fractionnaires_et_non_finies_refusees(self):
         for params in [{'douches': 1.5}, {'wc': float('nan')}, {'etage': 2.5}]:
             with self.subTest(params=params), self.assertRaises(ValueError):

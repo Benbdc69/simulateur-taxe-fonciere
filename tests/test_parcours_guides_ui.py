@@ -57,25 +57,59 @@ class ParcoursGuidesUI(unittest.TestCase):
             self.assertEqual(at.session_state['hab_etape'], 2)
             champ(at.button, 'Vérifier mes informations').click().run()
             self.assertTrue(any('supérieure à zéro' in x.value for x in at.error))
-            champ(at.number_input, 'Surface des pièces et annexes intérieures (m²)').set_value(45.)
+            self.assertNotIn('Pièces avec chauffage admissible', [x.label for x in at.number_input])
+            self.assertIn('Lavabos et éviers', [x.label for x in at.number_input])
+            champ(at.number_input, 'Salles à manger et pièces de réception diverses').set_value(1)
+            champ(at.number_input, 'Chambres et autres pièces habitables').set_value(2)
+            champ(at.number_input, 'Cuisines de moins de 9 m²').set_value(1)
+            champ(at.checkbox, 'Chauffage ou climatisation dans les DOM').check()
+            champ(at.number_input, 'Surface totale des pièces et annexes affectées à l’habitation (m²)').set_value(45.)
             champ(at.number_input, 'Garage, cave, grenier et autres dépendances (m²)').set_value(12.)
             champ(at.button, 'Vérifier mes informations').click().run()
             self.assertEqual(at.session_state['hab_etape'], 3)
             tarifs.assert_not_called()
             champ(at.button, 'Calculer mon estimation').click().run()
             self.assertFalse(at.exception, [str(x.value) for x in at.exception])
-            self.assertEqual(len(at.session_state['hab_resultat']['tarifs']), 2)
+            self.assertEqual(len(at.session_state['hab_resultat']['tarifs']), 4)
             self.assertTrue(any('non confirmée' in x.value for x in at.warning))
             self.assertTrue(any('Estimation partielle' in x.value for x in at.warning))
-            champ(at.selectbox, 'Scénario à examiner').select(1).run()
+            champ(at.selectbox, 'Scénario à examiner').select(3).run()
             self.assertFalse(at.exception)
-            self.assertEqual(at.session_state['hab_resultat']['tarifs'][1]['categorie'], '6')
+            self.assertEqual(at.session_state['hab_resultat']['tarifs'][3]['categorie'], '6')
+            cartes = [x.value for x in at.markdown if 'hab-result-card hab-tax-card' in x.value]
+            self.assertEqual(len(cartes), 6)
+            self.assertTrue(any('Cotisations annuelles estimées' in x.value for x in at.markdown))
+            self.assertTrue(any('Intercommunalité' in x for x in cartes))
+            self.assertFalse(next(x for x in at.expander if x.label == 'Comprendre le calcul, étape par étape').proto.expanded)
+            self.assertEqual(at.session_state['hab_resultat']['h2']['pieces']['chambres'], 2)
+            self.assertEqual(at.session_state['hab_resultat']['tarifs'][3]['pieces_chauffage_scenario'], 4)
             sync.assert_not_called()
             tarifs.assert_called_once()
             champ(at.button, 'Modifier mes informations').click().run()
             self.assertNotIn('hab_resultat', at.session_state)
-            self.assertEqual(champ(at.number_input, 'Surface des pièces et annexes intérieures (m²)').value, 45.)
+            self.assertEqual(champ(at.number_input, 'Surface totale des pièces et annexes affectées à l’habitation (m²)').value, 45.)
             self.assertEqual(champ(at.number_input, 'Garage, cave, grenier et autres dépendances (m²)').value, 12.)
+            self.assertEqual(champ(at.number_input, 'Chambres et autres pièces habitables').value, 2)
+            self.assertTrue(champ(at.checkbox, 'Chauffage ou climatisation dans les DOM').value)
+
+    def test_resultat_incomplet_affiche_valeur_locative_sans_cotisations(self):
+        from dossier_habitation import calculer_scenarios
+        adr = {'libelle': 'Adresse test, Lyon', 'commune': 'Lyon', 'insee': '69387'}
+        saisie = {'nature': 'A', 'annee': 2026, 'categorie': '5', 'surface': 45., 'adresse': adr,
+                  'parametres': {'annexes': 0., 'terrasse': 0., 'entretien': 'Passable',
+                                  'situation_generale': 'Ordinaire', 'situation_particuliere': 'Ordinaire'}}
+        rows = [dict(insee='69387', nature='A', categorie='5', serie='A', origine='387', tarif_1970=10., annee_tarif=2024)]
+        r = calculer_scenarios(saisie, adr, {}, rows)
+        at = AppTest.from_file(str(ROOT / 'parcours_habitation.py'))
+        at.session_state['hab_etape'] = 3
+        at.session_state['hab_saisie'] = saisie
+        at.session_state['hab_resultat'] = {**r, 'incidents': [], 'source_tarifs': 'Fixture'}
+        at.run()
+        self.assertFalse(at.exception, [x.value for x in at.exception])
+        self.assertTrue(any('Valeur locative estimée' in x.value for x in at.markdown))
+        self.assertFalse(any('Cotisations annuelles estimées' in x.value for x in at.markdown))
+        self.assertFalse(any('hab-result-card hab-tax-card' in x.value for x in at.markdown))
+        self.assertTrue(any('Taux non documentés' in x.value for x in at.warning))
 
 
 if __name__ == '__main__':

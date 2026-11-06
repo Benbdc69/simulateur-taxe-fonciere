@@ -49,3 +49,25 @@ navigation Streamlit simulent les API publiques et ne valident pas leur accès r
 Les tests de non-régression du moteur sont inclus. Les appels réels IGN/DGFiP
 doivent être vérifiés sur un environnement disposant des autorisations réseau
 nécessaires avant publication générale.
+
+### Appartement : rubriques H2
+
+Le cadre 41 recueille les nombres de pièces par type, la surface totale affectée
+à l’habitation, les terrasses et l’existence d’une partie professionnelle. Le
+cadre 42 recueille les équipements, dont une case chauffage, l’ascenseur et
+l’escalier de service. La rubrique sanitaire regroupe les lavabos et les éviers.
+Les correctifs et le classement réservés à l’administration sont regroupés
+dans un volet facultatif.
+
+Le H2 ne détaille pas la desserte du chauffage : lorsque la case est cochée,
+deux hypothèses de sensibilité sont conservées (aucune équivalence chauffage,
+ou toutes les pièces et annexes déclarées desservies), selon le moteur existant.
+Ces hypothèses sont identifiées à l’écran et dans le PDF ; elles ne constituent
+pas une évaluation cadastrale confirmée. L’escalier de service est conservé sans
+correctif automatique. La partie professionnelle demeure hors du calcul habitation.
+
+Le résultat habitation reprend les cartes du parcours professionnel : montant
+annuel sur le périmètre simulé, trois indicateurs de synthèse et répartition par
+taxe avec base, taux et millésime. Le calcul détaillé et les sources restent dans
+des volets dépliables. Si des taux manquent, la carte principale affiche la valeur
+locative et précise qu’il ne s’agit pas d’une cotisation.

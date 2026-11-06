@@ -1,6 +1,7 @@
 """Parcours guidé H1/H2 : adresse confirmée, saisie expliquée, calcul traçable."""
 from __future__ import annotations
 import json
+from html import escape
 from pathlib import Path
 import streamlit as st
 from cadastre import adresses
@@ -8,7 +9,7 @@ from historique_taux import resoudre_tout, COMPOSANTES, LIBELLES
 from mise_a_jour_simple import synchroniser_taux
 from moteur_habitation import ENTRETIEN, SITUATION, CATEGORIES
 from tarifs_habitation import tarifs_nationaux, SOURCE
-from dossier_habitation import code_adresse, calculer_scenarios
+from dossier_habitation import code_adresse, calculer_scenarios, H2_PIECES
 from export_habitation_pdf import generer_pdf_habitation
 
 ROOT = Path(__file__).resolve().parent
@@ -21,6 +22,17 @@ def load_ref():
 
 def fmt(value):
     return f'{float(value):,.2f}'.replace(',', ' ').replace('.', ',') + ' €'
+
+
+def carte_habitation(titre, valeur, detail, principale=False):
+    """Même palette et même hiérarchie que les cartes professionnelles."""
+    classe = 'hab-result-card hab-result-main' if principale else 'hab-result-card'
+    st.markdown(
+        f'<div class="{classe}"><div class="hab-result-label">{escape(str(titre))}</div>'
+        f'<div class="hab-result-value">{escape(str(valeur))}</div>'
+        f'<div class="hab-result-detail">{escape(str(detail))}</div></div>',
+        unsafe_allow_html=True,
+    )
 
 
 def aller(etape):
@@ -80,60 +92,86 @@ elif etape == 2:
     st.caption(f"{saisie['adresse']['libelle']} · {'Maison H1' if saisie['nature'] == 'M' else 'Appartement H2'} · {saisie['annee']}")
     params = saisie.get('parametres', {})
     maison = saisie['nature'] == 'M'
+    h2 = saisie.get('h2', {})
     with st.form('hab_description'):
-        st.markdown('#### Surfaces réelles, avant pondération')
+        pieces_h2 = {}
+        if not maison:
+            st.markdown('#### 41 · Consistance du logement — H2')
+            st.caption('A · Pièces et annexes affectées à l’habitation. Renseignez les nombres comme sur votre déclaration H2 ; chaque pièce doit être comptée une seule fois.')
+            for cle, libelle, aide in [
+                ('reception', 'Salles à manger et pièces de réception diverses', 'Séjour, salon, salle commune, bibliothèque, etc. Comptez les pièces, pas les mètres carrés.'),
+                ('chambres', 'Chambres et autres pièces habitables', 'Chambres et autres pièces habitables, hors pièces déjà déclarées dans une autre rubrique.'),
+                ('cuisines_moins_9', 'Cuisines de moins de 9 m²', 'Nombre de cuisines dont la surface est inférieure à 9 m².'),
+                ('cuisines_9_plus', 'Cuisines de 9 m² et plus', 'Une cuisine de 9 m² exactement est à compter ici.'),
+                ('salles_eau', 'Salles d’eau', 'Salles de bains, salles de douches, cabinets de toilette avec eau courante. Les appareils sanitaires sont à compter séparément au cadre 42.'),
+                ('autres_annexes', 'Autres annexes intérieures', 'Entrée, couloir, antichambre, office, rangement, etc., à l’exclusion des terrasses accessibles du cadre B.'),
+            ]:
+                pieces_h2[cle] = st.number_input(libelle, min_value=0, max_value=100, value=int(h2.get('pieces', {}).get(cle, 0)), help=aide)
+        else:
+            st.markdown('#### Surfaces réelles, avant pondération')
         st.caption('Reprenez les surfaces déclarées sur H1/H2 ou mesurées au sol. La surface Carrez ou habitable peut différer de la surface cadastrale. Ne comptez jamais deux fois la même surface.')
-        surface = st.number_input('Surface des pièces et annexes intérieures (m²)', min_value=0., max_value=20000.,
+        surface = st.number_input('Surface des pièces et annexes intérieures (m²)' if maison else 'Surface totale des pièces et annexes affectées à l’habitation (m²)', min_value=0., max_value=20000.,
             value=float(saisie.get('surface', 0)), step=1.,
             help='Surface réelle des pièces et annexes intérieures du logement, avant correctifs fiscaux. N’y ajoutez pas la terrasse ni les dépendances saisies ci-dessous. Une valeur supérieure à zéro est obligatoire.')
         a, b = st.columns(2)
         with a:
-            terrasse = st.number_input('Terrasse accessible (m²)', min_value=0., max_value=10000., value=float(params.get('terrasse', 0)), step=1.,
+            terrasse = st.number_input('Terrasse accessible (m²)' if maison else 'Terrasses et toitures-terrasses accessibles (m²)', min_value=0., max_value=10000., value=float(params.get('terrasse', 0)), step=1.,
                 help='Surface réelle de la terrasse accessible. Laissez 0 s’il n’y en a pas. Ne l’ajoutez pas à la surface des pièces.')
         with b:
             annexes = st.number_input('Garage, cave, grenier et autres dépendances (m²)', min_value=0., max_value=10000., value=float(params.get('annexes', 0)), step=1.,
                 help='Uniquement les surfaces qui ne sont pas déjà comptées dans le logement. Pour un appartement, ces dépendances peuvent être des unités fiscales séparées et ne sont pas chiffrées avec le tarif du logement.')
         if not maison:
             st.info('Pour un appartement, les terrasses et dépendances renseignées seront signalées à part, sans les incorporer automatiquement au calcul de la partie principale.')
-        st.markdown('#### Classement cadastral')
-        ordre = sorted(CATEGORIES, key=lambda x: (int(x[0]), len(x)))
-        categories = [None] + ordre
-        categorie = st.selectbox('Catégorie cadastrale du logement', categories,
-            index=categories.index(saisie.get('categorie')),
-            format_func=lambda c: 'Je ne connais pas ma catégorie' if c is None else f'Catégorie {c}',
-            help='Reprenez le classement de la fiche d’évaluation cadastrale (6675). Les catégories vont de 1 à 8 ; M indique une catégorie intermédiaire. Ce classement fiscal ne se déduit pas du prix du logement ou de son DPE.')
-        st.caption('Catégorie inconnue : le résultat présentera les catégories et séries disponibles comme des scénarios, sans attribuer automatiquement un classement à votre bien.')
-        st.markdown('#### État, situation et dépendances')
-        st.caption('Ces correctifs décrivent l’état et la situation retenus pour l’évaluation cadastrale. Les valeurs proposées sont des hypothèses à vérifier sur votre fiche.')
-        a, b = st.columns(2)
-        with a:
-            entretien = st.selectbox('État d’entretien cadastral', list(ENTRETIEN), index=list(ENTRETIEN).index(params.get('entretien', 'Passable')),
-                help='État général du bâtiment : bon, assez bon, passable, médiocre ou mauvais. Il s’agit du correctif cadastral, pas d’une note de décoration. « Passable » applique le coefficient neutre 1.')
-            sit_gen = st.selectbox('Situation générale', list(SITUATION), index=list(SITUATION).index(params.get('situation_generale', 'Ordinaire')),
-                help='Appréciation du quartier ou de l’environnement général du bien. « Ordinaire » n’ajoute ni ne retranche de correctif ; confirmez avec la fiche cadastrale.')
-        with b:
-            sit_part = st.selectbox('Situation particulière', list(SITUATION), index=list(SITUATION).index(params.get('situation_particuliere', 'Ordinaire')),
-                help='Situation propre au logement dans son environnement : exposition, vue, nuisances ou accès, selon l’évaluation cadastrale. Ne confondez pas avec la situation du quartier.')
-            if maison:
-                coef_annexe = st.selectbox('Pondération des dépendances', [.2, .3, .4, .5, .6], index=[.2, .3, .4, .5, .6].index(params.get('coeff_annexes', .4)),
-                    help='Coefficient cadastral de 0,2 à 0,6 selon le service rendu. Le choix 0,4 est une hypothèse, pas une valeur déduite de votre adresse. Reprenez la valeur de votre fiche si elle est connue.')
-                coef_terrasse = st.selectbox('Pondération de la terrasse', [.2, .3, .4, .5, .6], index=[.2, .3, .4, .5, .6].index(params.get('coeff_terrasse', .4)),
-                    help='Coefficient de 0,2 à 0,6 à confirmer sur le dossier cadastral. Il s’applique uniquement à la terrasse et non aux pièces du logement.')
-            else:
-                etage = st.number_input('Étage du logement', min_value=0, max_value=80, value=int(params.get('etage', 0)),
-                    help='0 pour le rez-de-chaussée, 1 pour le premier étage, etc. L’étage intervient dans le correctif d’ascenseur des appartements.')
-                ascenseur = st.checkbox('Ascenseur desservant le logement', value=params.get('ascenseur', False),
-                    help='Cochez si un ascenseur dessert le logement. Ce correctif ne concerne pas les maisons.')
-        st.markdown('#### Équipements du logement')
+        partie_professionnelle = False
+        declaration_6660 = False
+        if not maison:
+            st.caption('B · Terrasses et toitures-terrasses accessibles : surface séparée de la surface totale des pièces. Les garages et caves distincts ne relèvent pas de cette surface totale.')
+            partie_professionnelle = st.checkbox('C · Le logement comporte une partie professionnelle', value=h2.get('partie_professionnelle', False), help='Reprend le cadre C du H2. La partie professionnelle doit être examinée séparément ; ne la comptez pas dans les surfaces affectées à l’habitation.')
+            declaration_6660 = st.checkbox('Une déclaration 6660-REV a été souscrite pour cette partie', value=h2.get('declaration_6660', False), help='Information déclarative uniquement : cette case ne calcule pas la taxe de la partie professionnelle.')
+        with st.expander('Paramètres cadastraux — zone réservée à l’administration sur le H2', expanded=maison):
+            st.caption('Facultatif : reprenez ces valeurs uniquement si elles figurent sur votre fiche d’évaluation. À défaut, la catégorie reste inconnue et les correctifs neutres servent d’hypothèses de simulation.')
+            st.markdown('#### Classement cadastral')
+            ordre = sorted(CATEGORIES, key=lambda x: (int(x[0]), len(x)))
+            categories = [None] + ordre
+            categorie = st.selectbox('Catégorie cadastrale du logement', categories,
+                index=categories.index(saisie.get('categorie')),
+                format_func=lambda c: 'Je ne connais pas ma catégorie' if c is None else f'Catégorie {c}',
+                help='Reprenez le classement de la fiche d’évaluation cadastrale (6675). Les catégories vont de 1 à 8 ; M indique une catégorie intermédiaire. Ce classement fiscal ne se déduit pas du prix du logement ou de son DPE.')
+            st.caption('Catégorie inconnue : le résultat présentera les catégories et séries disponibles comme des scénarios, sans attribuer automatiquement un classement à votre bien.')
+            st.markdown('#### État, situation et dépendances')
+            st.caption('Ces correctifs décrivent l’état et la situation retenus pour l’évaluation cadastrale. Les valeurs proposées sont des hypothèses à vérifier sur votre fiche.')
+            a, b = st.columns(2)
+            with a:
+                entretien = st.selectbox('État d’entretien cadastral', list(ENTRETIEN), index=list(ENTRETIEN).index(params.get('entretien', 'Passable')),
+                    help='État général du bâtiment : bon, assez bon, passable, médiocre ou mauvais. Il s’agit du correctif cadastral, pas d’une note de décoration. « Passable » applique le coefficient neutre 1.')
+                sit_gen = st.selectbox('Situation générale', list(SITUATION), index=list(SITUATION).index(params.get('situation_generale', 'Ordinaire')),
+                    help='Appréciation du quartier ou de l’environnement général du bien. « Ordinaire » n’ajoute ni ne retranche de correctif ; confirmez avec la fiche cadastrale.')
+            with b:
+                sit_part = st.selectbox('Situation particulière', list(SITUATION), index=list(SITUATION).index(params.get('situation_particuliere', 'Ordinaire')),
+                    help='Situation propre au logement dans son environnement : exposition, vue, nuisances ou accès, selon l’évaluation cadastrale. Ne confondez pas avec la situation du quartier.')
+                if maison:
+                    coef_annexe = st.selectbox('Pondération des dépendances', [.2, .3, .4, .5, .6], index=[.2, .3, .4, .5, .6].index(params.get('coeff_annexes', .4)),
+                        help='Coefficient cadastral de 0,2 à 0,6 selon le service rendu. Le choix 0,4 est une hypothèse, pas une valeur déduite de votre adresse. Reprenez la valeur de votre fiche si elle est connue.')
+                    coef_terrasse = st.selectbox('Pondération de la terrasse', [.2, .3, .4, .5, .6], index=[.2, .3, .4, .5, .6].index(params.get('coeff_terrasse', .4)),
+                        help='Coefficient de 0,2 à 0,6 à confirmer sur le dossier cadastral. Il s’applique uniquement à la terrasse et non aux pièces du logement.')
+                else:
+                    etage = st.number_input('Étage du logement', min_value=0, max_value=80, value=int(params.get('etage', 0)),
+                        help='0 pour le rez-de-chaussée, 1 pour le premier étage, etc. L’étage intervient dans le correctif d’ascenseur des appartements.')
+        st.markdown('#### Équipements du logement' if maison else '#### 42 · Confort du logement — H2')
         st.caption('Le calcul transforme les équipements en équivalences de surface. Vérifiez les quantités proposées : elles ne sont pas déduites automatiquement du nombre de pièces.')
         a, b = st.columns(2)
         quantites = {}
         for i, (cle, libelle, valeur, aide) in enumerate([
             ('wc', 'WC privatifs', 1, 'Nombre de WC privatifs dans le logement. Ne comptez pas les sanitaires communs de l’immeuble.'),
-            ('lavabos', 'Lavabos', 1, 'Nombre de lavabos ; ne comptez pas les éviers de cuisine dans cette rubrique.'),
+            ('lavabos', 'Lavabos et éviers' if not maison else 'Lavabos', 1, 'Nombre de lavabos et éviers, y compris les éviers de cuisine : le H2 les regroupe dans la même rubrique.'),
             ('douches', 'Douches', 1, 'Nombre de douches. Ne comptez pas une baignoire équipée d’un flexible comme un second appareil distinct.'),
             ('baignoires', 'Baignoires', 0, 'Nombre de baignoires. Évitez de compter deux fois un même équipement dans la rubrique douches.'),
             ('pieces_chauffees', 'Pièces avec chauffage admissible', 0, 'Nombre de pièces disposant d’un chauffage fixe assimilable au chauffage central pour l’évaluation cadastrale. Ne comptez pas les couloirs ou WC ; des radiateurs mobiles seuls ne suffisent pas.'),
+        ] if maison else [
+            ('wc', 'WC particuliers', 0, 'Nombre de WC privatifs du logement.'),
+            ('baignoires', 'Baignoires', 0, 'Nombre de baignoires ; ne comptez pas un même appareil dans deux rubriques.'),
+            ('douches', 'Receveurs de douches', 0, 'Nombre de receveurs de douche distincts. Le flexible d’une baignoire ne constitue pas un receveur supplémentaire.'),
+            ('lavabos', 'Lavabos et éviers', 0, 'Nombre de lavabos et d’éviers, éviers de cuisine inclus, comme sur le H2.'),
         ]):
             with [a, b][i % 2]:
                 quantites[cle] = st.number_input(libelle, min_value=0, max_value=100, value=int(params.get(cle, valeur)), help=aide)
@@ -147,7 +185,15 @@ elif etape == 2:
             ('vide_ordures', 'Vide-ordures', False, 'Installation de vide-ordures. Un local à poubelles ou un bac de collecte ne correspond pas à cet équipement.'),
         ]):
             with [a, b][i % 2]:
-                equipements[cle] = st.checkbox(libelle, value=params.get(cle, valeur), help=aide)
+                equipements[cle] = st.checkbox(libelle, value=params.get(cle, valeur if maison else False), help=aide)
+        chauffage = False
+        escalier_service = False
+        ascenseur = False
+        if not maison:
+            chauffage = st.checkbox('Chauffage ou climatisation dans les DOM', value=h2.get('chauffage', False), help='Case 6 du cadre 42 du H2. Cochez selon l’équipement du logement. Le référentiel de calcul actuel est limité à la métropole ; les DOM ne sont pas chiffrés.')
+            ascenseur = st.checkbox('Ascenseur', value=params.get('ascenseur', False), help='Case 8 du cadre 42 : présence d’un ascenseur desservant le logement.')
+            escalier_service = st.checkbox('Escalier de service', value=h2.get('escalier_service', False), help='Case 9 du cadre 42. Cette information est conservée dans le dossier ; aucun coefficient supplémentaire n’est inventé.')
+            st.caption('La case chauffage ne précise pas combien de pièces sont desservies. Si elle est cochée, le résultat explorera les hypothèses sans équivalence chauffage et avec toutes les pièces déclarées desservies. Ce ne sont pas deux évaluations cadastrales confirmées.')
         a, b = st.columns(2)
         retour = a.form_submit_button('Retour au logement')
         suivant = b.form_submit_button('Vérifier mes informations', type='primary')
@@ -157,10 +203,16 @@ elif etape == 2:
             'situation_generale': sit_gen, 'situation_particuliere': sit_part,
             **quantites, **equipements,
             **({'coeff_annexes': coef_annexe, 'coeff_terrasse': coef_terrasse} if maison else {'etage': etage, 'ascenseur': ascenseur})})
+        if maison:
+            saisie.pop('h2', None)
+        else:
+            saisie['h2'] = {'pieces': pieces_h2, 'chauffage': chauffage, 'escalier_service': escalier_service, 'partie_professionnelle': partie_professionnelle, 'declaration_6660': declaration_6660}
         if retour:
             aller(1)
         elif surface <= 0:
             st.error('Indiquez une surface réelle du logement supérieure à zéro.')
+        elif not maison and not sum(pieces_h2.values()):
+            st.error('Renseignez au moins une pièce dans le cadre 41 du H2.')
         else:
             aller(3)
 
@@ -170,6 +222,9 @@ else:
     params = saisie['parametres']
     st.write(f"**{adr['libelle']}** · {'Maison H1' if saisie['nature'] == 'M' else 'Appartement H2'} · imposition {saisie['annee']}")
     st.write(f"Surface réelle : **{saisie['surface']:g} m²** · Terrasse : **{params['terrasse']:g} m²** · Dépendances : **{params['annexes']:g} m²**")
+    if saisie.get('h2'):
+        st.table([{'Consistance H2': H2_PIECES[k], 'Nombre': v} for k,v in saisie['h2']['pieces'].items()])
+        st.write('Chauffage : ' + ('oui' if saisie['h2']['chauffage'] else 'non') + ' · Escalier de service : ' + ('oui' if saisie['h2']['escalier_service'] else 'non'))
     st.write('Catégorie : **' + (saisie.get('categorie') or 'inconnue — exploration des scénarios disponibles') + '**')
     with st.expander('Relire les correctifs et les équipements retenus'):
         st.write(f"Entretien : {params['entretien']} · Situation générale : {params['situation_generale']} · Situation particulière : {params['situation_particuliere']}")
@@ -199,20 +254,35 @@ else:
     r = st.session_state.get('hab_resultat')
     if r:
         st.divider()
-        st.subheader('Votre estimation expliquée')
+        st.markdown("""<style>
+.hab-result-card{border:1px solid #DFE8F2;border-radius:18px;background:#FFFFFF;color:#153957;padding:1.15rem 1.2rem;margin:.25rem 0 .8rem;box-shadow:0 5px 22px rgba(22,67,109,.055);border-top:3px solid #246A9D;min-height:148px}
+.hab-result-label{font-size:.9rem;font-weight:600;color:#547088;margin-bottom:.5rem}
+.hab-result-value{font-size:1.65rem;font-weight:750;line-height:1.2;color:#164C79;overflow-wrap:anywhere}
+.hab-result-detail{font-size:.86rem;color:#526B80;line-height:1.5;margin-top:.55rem}
+.hab-result-main{background:#EDF4F9;border-left:5px solid #246A9D;border-top:1px solid #DFE8F2;min-height:0;padding:1.4rem 1.5rem}
+.hab-result-main .hab-result-value{font-size:clamp(2rem,6vw,3rem)}
+.hab-tax-card{border-top:1px solid #DFE8F2;border-left:4px solid #246A9D;min-height:155px}
+@media(max-width:640px){.hab-result-card{min-height:0;padding:1rem}.hab-result-value{font-size:1.45rem}}
+</style>""", unsafe_allow_html=True)
+        st.subheader('Votre estimation habitation')
+        st.caption(f"{r['adresse']} · {r['nature']} · Année {r['annee']}")
+        for reserve in r.get('reserves_h2', []):
+            st.warning(reserve)
         for incident in r['incidents']:
             st.warning(incident)
         if r['categorie_inconnue']:
             st.warning('Catégorie non confirmée : ces scénarios explorent les catégories publiées. Leur intervalle n’est ni une prévision ni une attribution de catégorie à votre logement.')
         if len(r['tarifs']) > 1:
-            st.info('Plusieurs catégories ou séries sont possibles. Reprenez la catégorie, la série et la commune d’origine figurant sur votre fiche d’évaluation pour identifier votre scénario.')
+            st.info('Plusieurs scénarios sont disponibles selon la catégorie, la série ou l’hypothèse de chauffage. La fiche d’évaluation permet de confirmer les paramètres applicables.')
             totals = [x['total'] for x in r['tarifs'] if 'total' in x]
             if totals:
                 st.write(f"**Étendue des scénarios disponibles : {fmt(min(totals))} à {fmt(max(totals))}**, hors frais, exonérations et dépendances distinctes.")
         choice = st.selectbox('Scénario à examiner', range(len(r['tarifs'])),
-            format_func=lambda i: f"Catégorie {r['tarifs'][i]['categorie']} · Série {r['tarifs'][i]['serie']} · Origine {r['tarifs'][i]['origine'] or 'non précisée'} · {fmt(r['tarifs'][i]['tarif_1970'])}/m²",
+            format_func=lambda i: f"Catégorie {r['tarifs'][i]['categorie']} · Série {r['tarifs'][i]['serie']} · Origine {r['tarifs'][i]['origine'] or 'non précisée'} · {fmt(r['tarifs'][i]['tarif_1970'])}/m²" + (f" · chauffage : {r['tarifs'][i]['pieces_chauffage_scenario']} pièces (hypothèse)" if 'pieces_chauffage_scenario' in r['tarifs'][i] else ''),
             help='Ce choix sert à examiner un scénario ; il ne confirme pas le classement cadastral de votre logement.')
         x = r['tarifs'][choice]
+        if 'pieces_chauffage_scenario' in x:
+            st.info(f"Hypothèse de ce scénario : {x['pieces_chauffage_scenario']} pièces desservies par le chauffage. Cette hypothèse n’est pas confirmée par la seule case du H2.")
         sp = x['surfaces']
         if sp['dependances_a_evaluer_separement']:
             st.warning('Estimation partielle : terrasse et/ou dépendances d’appartement sont signalées mais non chiffrées. Les montants portent sur la partie principale uniquement.')
@@ -224,21 +294,46 @@ else:
             st.warning('Taux antérieurs repris à titre indicatif : ' + ', '.join(anciens) + '.')
         if r['taux'].get('teom') and not r['taux']['teom'].get('zonage_confirme'):
             st.warning('Le zonage TEOM n’est pas confirmé pour cette adresse : la cotisation correspondante reste à vérifier.')
+        if 'montants' in x:
+            carte_habitation(
+                'Cotisations annuelles estimées — périmètre calculé', fmt(x['total']),
+                'Hors frais de gestion et exonérations. Sous réserve du classement cadastral, des taux et du zonage TEOM. Dépendances distinctes non incluses.',
+                principale=True,
+            )
+        else:
+            carte_habitation('Valeur locative estimée', fmt(x['vl_annee']),
+                'Il s’agit de la valeur locative, pas du montant de taxe à payer. Les taux manquants empêchent de calculer les cotisations.', principale=True)
         a, b, c = st.columns(3)
-        a.metric('Surface pondérée cadastrale', f"{sp['surface_ponderee']} m²")
-        b.metric(f"Valeur locative {r['annee']}", fmt(x['vl_annee']))
-        c.metric('Base TFPB après déduction de 50 %', fmt(x['base_tf']))
-        with st.expander('Comprendre le calcul, étape par étape', expanded=True):
+        with a:
+            carte_habitation('Surface pondérée', f"{sp['surface_ponderee']} m²",
+                'Surface cadastrale calculée à partir des surfaces et des équipements déclarés.')
+        with b:
+            carte_habitation(f"Valeur locative {r['annee']}", fmt(x['vl_annee']),
+                'Valeur de référence revalorisée pour l’année d’imposition.')
+        with c:
+            carte_habitation('Base de taxe foncière', fmt(x['base_tf']),
+                '50 % de la valeur locative, avant exonérations particulières.')
+        if 'montants' in x:
+            st.markdown('#### Répartition par taxe')
+            colonnes = st.columns(2)
+            for i, (cle, montant) in enumerate(x['montants'].items()):
+                taux = r['taux'][cle]
+                with colonnes[i % 2]:
+                    st.markdown(
+                        '<div class="hab-result-card hab-tax-card">'
+                        f'<div class="hab-result-label">{escape(LIBELLES[cle])}</div>'
+                        f'<div class="hab-result-value">{escape(fmt(montant))}</div>'
+                        f'<div class="hab-result-detail">Base : {escape(fmt(x["base_tf"]))} · Taux : {float(taux["taux"]):g} %<br/>'
+                        f'Millésime du taux : {int(taux["annee_source"])}</div></div>',
+                        unsafe_allow_html=True,
+                    )
+        with st.expander('Comprendre le calcul, étape par étape', expanded=False):
             st.write(f"1. Surface comparative : **{sp['comparative']} m²**, issue du barème de catégorie {x['categorie']}.")
             st.write(f"2. Ajout des dépendances pondérées retenues : **{sp['annexes_ponderees'] + sp['terrasse_ponderee']} m²** ; correctif global **× {sp['correctif']}** → surface nette **{sp['surface_nette']} m²**.")
             st.write(f"3. Équipements : **+ {sp['equivalence_confort']} m²** → surface pondérée **{sp['surface_ponderee']} m²**.")
             st.table([{'Équipement': k, 'Équivalence (m²)': v} for k, v in sp['detail_confort'].items() if v])
             st.write(f"4. Valeur locative 1970 : {sp['surface_ponderee']} m² × {fmt(x['tarif_1970'])}/m² = **{fmt(x['vl_1970'])}**.")
             st.write(f"5. Actualisation 1980 × {r['facteur']['actualisation_1980']} ; revalorisation nationale × {r['facteur']['revalorisation_nationale']} → **{fmt(x['vl_annee'])}**. La moitié forme la base TFPB : **{fmt(x['base_tf'])}**.")
-        if 'montants' in x:
-            st.metric('Cotisations estimées — hors frais et exonérations', fmt(x['total']))
-            st.caption('Sur le périmètre calculé, sous réserve du classement, des taux et du zonage TEOM.')
-            st.table([{'Composante': LIBELLES[k], 'Base (€)': x['base_tf'], 'Taux (%)': r['taux'][k]['taux'], 'Montant (€)': v} for k, v in x['montants'].items()])
         with st.expander('Sources et millésimes utilisés'):
             st.write('Tarifs cadastraux DGFiP 2024 en valeur de référence 1970 : ' + SOURCE)
             st.write(r['facteur']['source_departement'])

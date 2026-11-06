@@ -32,6 +32,13 @@ def generer_pdf_habitation(d):
     for k,v in fields:
         story.append(Paragraph(f'<b>{ph(k)} :</b> {ph(v)}',st['AxNormalH']))
         story.append(Spacer(1,3))
+    if d.get('h2'):
+        from dossier_habitation import H2_PIECES
+        story.append(Paragraph('Consistance et confort déclarés au H2',st['AxHeadH']))
+        for key,value in d['h2']['pieces'].items():
+            story.append(Paragraph(ph(H2_PIECES[key])+ ' : '+ph(value),st['AxNormalH']))
+        for key,label in [('chauffage','Chauffage'),('escalier_service','Escalier de service'),('partie_professionnelle','Partie professionnelle'),('declaration_6660','Déclaration 6660-REV souscrite')]:
+            story.append(Paragraph(ph(label)+' : '+('oui' if d['h2'].get(key) else 'non'),st['AxNormalH']))
     story.append(Paragraph('Paramètres de revalorisation',st['AxHeadH']))
     fac=d['facteur']
     for title,val in [('Actualisation départementale 1980',fac['actualisation_1980']),
@@ -43,7 +50,7 @@ def generer_pdf_habitation(d):
     h=Table([[Paragraph('<b>Série</b>',st['AxNormalH']),Paragraph('<b>Tarif 1970/m²</b>',st['AxNormalH']),
               Paragraph('<b>VL 1970</b>',st['AxNormalH']),Paragraph('<b>VL année</b>',st['AxNormalH']),
               Paragraph('<b>Base TFPB</b>',st['AxNormalH']),Paragraph('<b>Sous-total*</b>',st['AxNormalH'])]]+
-          [[ph(x['serie'])+' / '+ph(x.get('origine') or '—'),eur(x['tarif_1970']),eur(x['vl_1970']),
+          [[Paragraph(ph(x['serie'])+' / '+ph(x.get('origine') or '—') + (f"<br/>Chauffage : {x['pieces_chauffage_scenario']} pièces (hyp.)" if 'pieces_chauffage_scenario' in x else ''),st['AxTinyH']),eur(x['tarif_1970']),eur(x['vl_1970']),
             eur(x.get('vl_annee',0)),eur(x.get('base_tf',0)),eur(x['total']) if 'total' in x else 'Non calculé']
            for x in d['tarifs'][:16]],colWidths=[2.65*cm,2.45*cm,2.45*cm,2.45*cm,2.45*cm,3.0*cm],repeatRows=1)
     h.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,0),PALE),('TEXTCOLOR',(0,0),(-1,0),BLUE),
@@ -68,10 +75,12 @@ def generer_pdf_habitation(d):
                               ('FONTSIZE',(0,0),(-1,-1),9),('BOTTOMPADDING',(0,0),(-1,-1),6)]))
         story.append(t)
     story.append(Paragraph('Périmètre et réserves',st['AxHeadH']))
-    notes=[]
+    notes=list(d.get('reserves_h2', []))
+    if 'pieces_chauffage_scenario' in chosen:
+        notes.append(f"Scénario sélectionné : hypothèse de {chosen['pieces_chauffage_scenario']} pièces desservies par le chauffage ; ce nombre n’est pas confirmé par la case chauffage du H2.")
     if d.get('categorie_inconnue'):
         notes.append('Catégorie cadastrale inconnue : ce rapport détaille un scénario exploratoire sélectionné, et ne confirme pas le classement du logement. D’autres catégories peuvent être disponibles dans le simulateur.')
-    if len(d['tarifs'])>1:notes.append('Plusieurs séries de tarifs : la série exacte du local doit être confirmée dans la fiche cadastrale.')
+    if len({(x['serie'],x.get('origine')) for x in d['tarifs']})>1:notes.append('Plusieurs séries de tarifs : la série exacte du local doit être confirmée dans la fiche cadastrale.')
     if d['surfaces'].get('dependances_a_evaluer_separement'):
         notes.append('IMPORTANT : terrasse et/ou dépendances d’appartement peuvent faire l’objet d’une évaluation fiscale distincte ; leur valeur n’entre pas dans les montants ci-dessus.')
     if not d.get('taux_complets'):notes.append('Une ou plusieurs composantes fiscales ne sont pas documentées. Aucun total complet n’est affiché.')
