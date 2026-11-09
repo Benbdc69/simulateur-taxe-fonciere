@@ -1,14 +1,106 @@
 """Recherche cadastrale partagée, sans géocodage ni adresse obligatoire."""
 import re
 import streamlit as st
+import requests
 from cadastre import rechercher_parcelle
 
 
-def saisir_reference(cle, valeurs=None):
+def rechercher_communes(nom, departement=""):
+    query = str(nom).strip()
+    if len(query) < 2:
+        raise ValueError('Saisissez au moins deux caractères du nom de la commune.')
+    departement = str(departement).strip().upper()
+    if departement and not re.fullmatch(r'(?:\d{2}|2[AB]|9[78]\d)', departement):
+        raise ValueError('Indiquez un code de département valide, par exemple 42, 2A ou 971.')
+    params = {'nom': query, 'fields': 'nom,code,codeDepartement', 'limit': 30}
+    if departement:
+        params['codeDepartement'] = departement
+    try:
+        response = requests.get('https://geo.api.gouv.fr/communes', params=params, timeout=(5, 15))
+        response.raise_for_status()
+        rows = response.json()
+    except (requests.RequestException, ValueError) as exc:
+        raise ConnectionError('La recherche officielle des communes est indisponible. Vous pouvez saisir le code INSEE manuellement.') from exc
+    if not isinstance(rows, list):
+        raise ConnectionError('Réponse inattendue du service des communes.')
+    resultats = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        code = str(row.get('code') or '').upper()
+        if re.fullmatch(r'(?:\d{5}|2[AB]\d{3})', code) and row.get('nom'):
+            dep = str(row.get('codeDepartement') or (code[:3] if code.startswith(('97','98')) else code[:2]))
+            if departement and dep != departement:
+                continue
+            resultats[code] = {'commune': str(row['nom']), 'insee': code, 'departement': dep}
+    return sorted(resultats.values(), key=lambda x: (x['commune'], x['departement'], x['insee']))
+
+
+def code_arrondissement(code, numero):
+    limites = {'75056': (20, 75100), '69123': (9, 69380), '13055': (16, 13200)}
+    if code not in limites:
+        raise ValueError('Cette commune ne comporte pas de sélection d’arrondissement.')
+    maximum, base = limites[code]
+    if isinstance(numero, bool) or not isinstance(numero, int) or not 1 <= numero <= maximum:
+        raise ValueError('Choisissez un arrondissement valide.')
+    return str(base + numero)
+
+
+def saisir_commune(cle, valeurs=None):
+    """Sélection hors formulaire : une recherche réseau seulement sur clic."""
+    valeurs = valeurs or {}
+    mode = st.radio('Choisir la commune', ['Rechercher par nom', 'Saisir le code INSEE'],
+        index=0 if valeurs.get('recherche_commune_auto', True) else 1, horizontal=True, key=cle+'_mode_commune')
+    if mode == 'Saisir le code INSEE':
+        return False, None
+    nom = st.text_input('Nom de la commune', value=st.session_state.get(cle+'_commune_query', valeurs.get('commune', '')),
+        key=cle+'_nom_recherche', help='Saisissez le nom de la commune, par exemple Andrézieux-Bouthéon. Pour Paris, Lyon ou Marseille, vous choisirez ensuite l’arrondissement.')
+    departement = st.text_input('Département (facultatif)', value=st.session_state.get(cle+'_commune_departement', ''), key=cle+'_dept_recherche', help='Pour affiner une recherche en cas d’homonymes : par exemple 42, 2A ou 971. Vous pouvez laisser vide.')
+    if st.button('Rechercher la commune', key=cle+'_chercher_commune'):
+        st.session_state[cle+'_communes'] = []
+        st.session_state[cle+'_commune_query'] = nom.strip()
+        st.session_state[cle+'_commune_departement'] = departement.strip().upper()
+        try:
+            st.session_state[cle+'_communes'] = rechercher_communes(nom, departement)
+            if not st.session_state[cle+'_communes']:
+                st.warning('Aucune commune trouvée. Précisez le nom ou utilisez la saisie manuelle du code INSEE.')
+        except (ValueError, ConnectionError) as exc:
+            st.error(str(exc))
+    rows = st.session_state.get(cle+'_communes', [])
+    if rows and nom.strip() == st.session_state.get(cle+'_commune_query') and departement.strip().upper() == st.session_state.get(cle+'_commune_departement'):
+        if len(rows) >= 30:
+            st.caption('Résultats limités à 30 communes : précisez le département ou le nom pour affiner la recherche.')
+        choix = st.selectbox('Commune à retenir', range(len(rows)), index=None, key=cle+'_choix_commune',
+            placeholder='Sélectionnez votre commune',
+            format_func=lambda i: f"{rows[i]['commune']} · département {rows[i]['departement']} · INSEE {rows[i]['insee']}",
+            help='En cas de communes homonymes, vérifiez le département. Aucune commune n’est choisie automatiquement.')
+        if choix is not None:
+            selection = dict(rows[choix])
+            if selection['insee'] in ('75056', '69123', '13055'):
+                maximum = {'75056': 20, '69123': 9, '13055': 16}[selection['insee']]
+                n = st.selectbox('Arrondissement cadastral', list(range(1, maximum+1)), index=None,
+                    key=cle+'_arrondissement', placeholder='Choisissez l’arrondissement')
+                if n is None:
+                    return True, None
+                selection['insee'] = code_arrondissement(selection['insee'], n)
+                selection['commune'] += f' — {n}e arrondissement'
+            return True, selection
+    return True, None
+
+
+def saisir_reference(cle, valeurs=None, automatique=False, selection=None):
     valeurs = valeurs or {}
     st.caption('Reprenez les références de votre avis, titre de propriété ou plan cadastral. Une parcelle peut contenir plusieurs locaux : le calcul portera sur le local que vous décrivez ensuite.')
-    commune = st.text_input('Commune de la parcelle', value=valeurs.get('commune', ''), key=cle+'_commune', help='Nom de la commune cadastrale. Pour Lyon, indiquez l’arrondissement si nécessaire.')
-    insee = st.text_input('Code INSEE cadastral de la commune', value=valeurs.get('insee', ''), key=cle+'_insee', help='Code à 5 caractères, différent du code postal. Exemple : 69387 pour Lyon 7e. Pour la Corse, le code peut commencer par 2A ou 2B.')
+    if automatique:
+        commune = selection['commune'] if selection else ''
+        insee = selection['insee'] if selection else ''
+        if selection:
+            st.caption(f"Commune retenue : {commune} · Code INSEE cadastral : {insee}")
+        else:
+            st.info('Recherchez et sélectionnez une commune ci-dessus avant de rechercher la parcelle.')
+    else:
+        commune = st.text_input('Commune de la parcelle', value=valeurs.get('commune', ''), key=cle+'_commune', help='Nom de la commune cadastrale. Pour Lyon, indiquez l’arrondissement si nécessaire.')
+        insee = st.text_input('Code INSEE cadastral de la commune', value=valeurs.get('insee', ''), key=cle+'_insee', help='Code à 5 caractères, différent du code postal. Exemple : 69387 pour Lyon 7e. Pour la Corse, le code peut commencer par 2A ou 2B.')
     a, b, c = st.columns(3)
     with a:
         prefixe = st.text_input('Préfixe cadastral (facultatif)', value=valeurs.get('prefixe', ''), key=cle+'_prefixe', help='Trois chiffres, souvent 000. Laissez vide si inconnu : plusieurs parcelles pourront être proposées en cas d’anciennes communes.')
@@ -16,7 +108,7 @@ def saisir_reference(cle, valeurs=None):
         section = st.text_input('Section cadastrale', value=valeurs.get('section', ''), key=cle+'_section', help='Exemple : AC, 01, ou A qui sera recherché sous 0A. Ce n’est pas le numéro de lot de copropriété.')
     with c:
         numero = st.text_input('Numéro de parcelle', value=valeurs.get('numero', ''), key=cle+'_numero', help='Exemple : 123 ou 0123. Ne saisissez pas le numéro de lot, de porte ou le numéro fiscal du local.')
-    return dict(commune=commune, insee=insee, prefixe=prefixe, section=section, numero=numero)
+    return dict(commune=commune, insee=insee, prefixe=prefixe, section=section, numero=numero, recherche_commune_auto=automatique)
 
 
 def normaliser_reference(reference):

@@ -6,7 +6,7 @@ from classement_habitation import CLASSEMENT, CRITERES, libelle_categorie
 from pathlib import Path
 import streamlit as st
 from cadastre import adresses
-from recherche_bien import saisir_reference, identifier_par_reference
+from recherche_bien import saisir_reference, identifier_par_reference, saisir_commune
 from historique_taux import resoudre_tout, COMPOSANTES, LIBELLES
 from mise_a_jour_simple import synchroniser_taux
 from moteur_habitation import ENTRETIEN, SITUATION, CATEGORIES
@@ -54,6 +54,9 @@ if etape == 1:
     st.subheader('1 · Identifier le logement')
     mode_recherche = st.radio('Rechercher le bien par', ['Adresse', 'Parcelle cadastrale'], horizontal=True,
         index=1 if saisie.get('mode_recherche') == 'Parcelle cadastrale' else 0, key='hab_mode')
+    automatique, selection_commune = (False, None)
+    if mode_recherche == 'Parcelle cadastrale':
+        automatique, selection_commune = saisir_commune('hab_ref', saisie.get('reference'))
     with st.form('hab_adresse'):
         reference = {}
         adresse = ''
@@ -62,7 +65,7 @@ if etape == 1:
                 placeholder='18 cours Gambetta, 69007 Lyon',
                 help='Saisissez le numéro, la voie, le code postal et la commune du logement imposé.')
         else:
-            reference = saisir_reference('hab_ref', saisie.get('reference'))
+            reference = saisir_reference('hab_ref', saisie.get('reference'), automatique=automatique, selection=selection_commune)
         nature = st.radio('Type de logement', ['Appartement (H2)', 'Maison (H1)'],
             index=1 if saisie.get('nature') == 'M' else 0, horizontal=True,
             help='H1 correspond aux maisons ; H2 aux appartements. Ce choix détermine le barème de surface et le traitement des dépendances.')

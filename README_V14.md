@@ -113,3 +113,19 @@ et les surfaces du local doivent toujours être renseignés par l’utilisateur.
 Validation : tests des identifiants, préfixes ambigus, codes Corse/DOM, réponses
 incohérentes, absence de résultat, navigation et confirmation dans les deux
 parcours. Un appel réel IGN a retrouvé 42005 / 000 / BI / 0242 pendant le développement.
+
+### Retrouver le code INSEE par le nom de commune
+
+En mode parcelle, « Rechercher par nom » interroge l’API officielle
+geo.api.gouv.fr. La sélection indique le nom, le département et le code INSEE ;
+un filtre facultatif par département permet de réduire les homonymes. Aucun
+résultat n’est choisi automatiquement. Les 30 premiers résultats sont affichés ;
+préciser le nom ou le département si nécessaire. Pour Paris, Lyon et Marseille,
+l’arrondissement est obligatoire et fournit le code cadastral correspondant.
+Le code INSEE n’est plus à saisir dans ce mode.
+
+« Saisir le code INSEE » reste disponible en solution de repli. Changer le
+nom ou le département invalide les anciens résultats. La recherche est exécutée
+uniquement sur clic, avant la saisie de la section et du numéro de parcelle.
+La résolution réelle a été vérifiée pour Andrézieux-Bouthéon, Lyon et des
+communes portant le nom Saint-Sauveur pendant le développement.

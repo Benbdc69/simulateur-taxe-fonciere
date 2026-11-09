@@ -78,6 +78,7 @@ class RechercheParcelleTests(unittest.TestCase):
 
 class RechercheParcelleUI(unittest.TestCase):
     def remplir(self, at):
+        champ(at.radio, 'Choisir la commune').set_value('Saisir le code INSEE').run()
         for label, val in [('Commune de la parcelle', 'Andrézieux-Bouthéon'), ('Code INSEE cadastral de la commune', '42005'),
                            ('Préfixe cadastral (facultatif)', '000'), ('Section cadastrale', 'BI'), ('Numéro de parcelle', '242')]:
             champ(at.text_input, label).input(val)

@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 import streamlit as st
 from cadastre import adresses, parcelles_a_l_adresse
-from recherche_bien import saisir_reference, identifier_par_reference, libelle_parcelle
+from recherche_bien import saisir_reference, identifier_par_reference, libelle_parcelle, saisir_commune
 from moteur import (COEFF_SURFACES, TAXES, insee_cadastral_adresse,
                     nom_commune_cadastrale, secteur_automatique,
                     localisation_automatique, neutralisation_avec_teom_reference,
@@ -193,7 +193,8 @@ with st.container(border=True):
     if mode_recherche == 'Adresse':
         adresse=st.text_input('Adresse complète du bien',placeholder='Ex. 18 cours Gambetta, 69007 Lyon', help='Indiquez le numéro, la voie, le code postal et la commune du local imposé, et non votre adresse de correspondance. Pour Lyon, précisez l’arrondissement.')
     else:
-        reference = saisir_reference('express_ref')
+        automatique, selection_commune = saisir_commune('express_ref')
+        reference = saisir_reference('express_ref', automatique=automatique, selection=selection_commune)
     categorie=st.selectbox('Catégorie du local', cat_codes,
         index=None, placeholder='Sélectionnez la catégorie figurant sur votre document',
         format_func=lambda code:f"{code} — {cat_map[code]['description']}",
