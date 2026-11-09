@@ -6,6 +6,7 @@ from __future__ import annotations
 from math import floor, isfinite
 import re
 from decimal import Decimal, ROUND_FLOOR
+from formulaire_h1 import valider_elements_incorpores
 from dependances_habitation import valider_dependances, ponderer_surface, SOURCE_PONDERATION
 
 MAISON={1:(3.00,400),2:(2.50,320),3:(2.10,240),4:(1.70,160),5:(1.45,110),6:(1.30,80),7:(1.20,60),8:(1.10,40)}
@@ -51,7 +52,7 @@ def surface_totale(surface,nature,categorie,annexes=0,coeff_annexes=.4,
                    entretien='Passable',situation_generale='Ordinaire',situation_particuliere='Ordinaire',
                    eau=True,gaz=False,electricite=True,baignoires=0,douches=1,lavabos=1,wc=1,
                    egout=True,vide_ordures=False,pieces_chauffees=0,terrasse=0,coeff_terrasse=.4,
-                   etage=0,ascenseur=False,dependances=None):
+                   etage=0,ascenseur=False,dependances=None,elements_incorpores=None):
     if entretien not in ENTRETIEN or situation_generale not in SITUATION or situation_particuliere not in SITUATION:
         raise ValueError('Correctif inconnu')
     if not .2<=float(coeff_annexes)<=.6 or not .2<=float(coeff_terrasse)<=.6:
@@ -60,6 +61,7 @@ def surface_totale(surface,nature,categorie,annexes=0,coeff_annexes=.4,
         if not isfinite(float(x)) or float(x)<0:raise ValueError('Quantité négative ou invalide')
     for x in (baignoires,douches,lavabos,wc,pieces_chauffees):
         if not float(x).is_integer():raise ValueError('Les nombres d’équipements et de pièces doivent être entiers')
+    detail_incorpores = valider_elements_incorpores(elements_incorpores or {}) if nature=='M' else []
     detail_dependances = valider_dependances(dependances)
     dependances_ponderees = sum(r['surface_ponderee'] for r in detail_dependances)
     confort_dependances = sum(r['equivalence_confort'] for r in detail_dependances)
@@ -79,7 +81,7 @@ def surface_totale(surface,nature,categorie,annexes=0,coeff_annexes=.4,
     }
     # Les annexes incorporées de maisons sont évaluées avec leur maison ;
     # les dépendances en copropriété peuvent constituer d'autres unités d'évaluation.
-    annexe_calc=ponderer_surface(annexes, coeff_annexes) if nature=='M' else 0
+    annexe_calc=(ponderer_surface(annexes, coeff_annexes) + sum(e['surface_ponderee'] for e in detail_incorpores)) if nature=='M' else 0
     terrasse_calc=ponderer_surface(terrasse, coeff_terrasse)
     asc=_ascenseur(etage,ascenseur) if nature=='A' else 0.
     base = Decimal(str(ENTRETIEN[entretien])) + Decimal(str(SITUATION[situation_generale])) + Decimal(str(SITUATION[situation_particuliere]))
@@ -116,7 +118,7 @@ def surface_totale(surface,nature,categorie,annexes=0,coeff_annexes=.4,
     }
     if confort_dependances:
         confort['Équipements propres aux dépendances rattachées'] = confort_dependances
-    return {'detail_surface_nette':detail_nette, 'detail_terrasse': {'surface_declaree':float(terrasse), 'surface_reelle_retenue':floor(float(terrasse)),
+    return {'detail_elements_incorpores':detail_incorpores, 'detail_surface_nette':detail_nette, 'detail_terrasse': {'surface_declaree':float(terrasse), 'surface_reelle_retenue':floor(float(terrasse)),
                 'coefficient':float(coeff_terrasse), 'surface_ponderee':terrasse_calc, 'source':SOURCE_PONDERATION},
             'detail_dependances':detail_dependances, 'dependances_ponderees':dependances_ponderees,
             'detail_comparative':detail_comparative, 'detail_confort':confort,

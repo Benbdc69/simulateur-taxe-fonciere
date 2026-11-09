@@ -4,16 +4,10 @@ from facteurs_habitation import facteur_departement_annee
 from historique_taux import COMPOSANTES, resoudre_tout
 from tarifs_habitation import rechercher_tarifs
 from math import isfinite
+from formulaire_h1 import valider_description_h1
 from dependances_habitation import valider_dependances, evaluer_distinctes
 
-H2_PIECES = {
-    'reception': 'Salles à manger et pièces de réception',
-    'chambres': 'Chambres et autres pièces habitables',
-    'cuisines_moins_9': 'Cuisines de moins de 9 m²',
-    'cuisines_9_plus': 'Cuisines de 9 m² et plus',
-    'salles_eau': 'Salles d’eau',
-    'autres_annexes': 'Autres annexes intérieures',
-}
+from referentiel_formulaires import PIECES_HABITATION as H2_PIECES
 
 
 def hypotheses_chauffage_h2(h2):
@@ -59,6 +53,8 @@ def calculer_scenarios(saisie, adresse, referentiel, tarifs):
     categorie = saisie.get('categorie')
     if categorie not in CATEGORIES:
         raise ValueError('Choisissez une catégorie cadastrale avant de calculer.')
+    if saisie['nature']=='M' and saisie.get('h1') is not None:
+        valider_description_h1(saisie['h1'])
     categories = [categorie]
     h2 = saisie.get('h2') if saisie['nature'] == 'A' else None
     hypotheses = hypotheses_chauffage_h2(h2) if h2 is not None else [None]
@@ -74,6 +70,8 @@ def calculer_scenarios(saisie, adresse, referentiel, tarifs):
             raise ValueError('La base de la dépendance doit être documentée pour l’année simulée.')
     distinctes = evaluer_distinctes(dependances, taux, complet)
     dependances_completes = all('total' in d for d in distinctes)
+    if saisie['nature']=='M' and saisie.get('h1',{}).get('partie_professionnelle'):
+        reserves.append('Maison comportant une partie professionnelle : seule la surface affectée à l’habitation est simulée. La partie professionnelle et sa déclaration 6660-REV sont à traiter séparément.')
     scenarios = []
     for cat in categories:
         rows = rechercher_tarifs(code, saisie['nature'], cat, rows=tarifs)
@@ -99,8 +97,8 @@ def calculer_scenarios(saisie, adresse, referentiel, tarifs):
             'categorie_confirmee': bool(saisie.get('categorie_confirmee')), 'facteur': facteur,
             'surface_reelle': saisie['surface'],
             'terrasse_reelle': saisie['parametres'].get('terrasse', 0),
-            'autres_dependances': saisie['parametres'].get('annexes', 0) + sum(d['surface'] for d in dependances),
+            'autres_dependances': saisie['parametres'].get('annexes', 0) + sum(e['surface'] for e in saisie['parametres'].get('elements_incorpores', {}).values()) + sum(d['surface'] for d in dependances),
             'dependances': dependances, 'dependances_distinctes': distinctes,
             'dependances_completes': dependances_completes,
             'tarifs': scenarios, 'taux': rates, 'taux_complets': complet,
-            'h2': h2, 'reserves_h2': reserves}
+            'h1':saisie.get('h1') if saisie['nature']=='M' else None, 'h2': h2, 'reserves_h2': reserves}

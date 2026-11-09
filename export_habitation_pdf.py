@@ -1,6 +1,7 @@
 """Export PDF Axens - Habitation H1/H2 (ne modifie pas export_pdf professionnel)."""
 from io import BytesIO
 from dependances_habitation import MODES
+from referentiel_formulaires import PIECES_HABITATION, SURFACES_DEP_H1
 from xml.sax.saxutils import escape
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -43,6 +44,25 @@ def generer_pdf_habitation(d):
             story.append(Paragraph(ph(H2_PIECES[key])+ ' : '+ph(value),st['AxNormalH']))
         for key,label in [('chauffage','Chauffage'),('escalier_service','Escalier de service'),('partie_professionnelle','Partie professionnelle'),('declaration_6660','Déclaration 6660-REV souscrite')]:
             story.append(Paragraph(ph(label)+' : '+('oui' if d['h2'].get(key) else 'non'),st['AxNormalH']))
+    if d.get('h1'):
+        h1=d['h1']
+        story.append(Paragraph('Description de la maison — H1, cadres 41 à 43',st['AxHeadH']))
+        for cle,valeur in h1['pieces'].items():
+            story.append(Paragraph(ph(PIECES_HABITATION[cle])+' : '+ph(valeur),st['AxNormalH']))
+        for titre,valeur in [('Gros murs',', '.join(h1.get('materiaux_murs',[])) or 'non renseignés'),
+                             ('Toitures',', '.join(h1.get('materiaux_toitures',[])) or 'non renseignées'),
+                             ('Année de construction',h1.get('annee_construction') or 'non renseignée'),
+                             ('Niveaux habitables (RDC compris, greniers exclus)',h1.get('niveaux_habitables') or 'non renseignés'),
+                             ('Pièces chauffées déclarées',h1.get('pieces_chauffees',0)),
+                             ('Partie professionnelle','oui' if h1.get('partie_professionnelle') else 'non'),
+                             ('Déclaration 6660-REV','oui' if h1.get('declaration_6660') else 'non')]:
+            story.append(Paragraph(ph(titre)+' : '+ph(valeur),st['AxNormalH']))
+        for element in d['surfaces'].get('detail_elements_incorpores',[]):
+            story.append(Paragraph(ph(element['designation'])+' : '+ph(element['surface'])+' m² x '+ph(element['coefficient'])+' → '+ph(element['surface_ponderee'])+' m² pondérés.',st['AxNormalH']))
+        story.append(Paragraph('Emprises au sol — cadre 6 (descriptives, non ajoutées aux surfaces fiscales)',st['AxHeadH']))
+        for cle,titre in [('maison','Maison'),('dependances','Dépendances'),('terrains','Cours, voies, jardins et terrains attenants')]:
+            valeur=h1.get('emprises',{}).get(cle)
+            story.append(Paragraph(ph(titre)+' : '+(ph(valeur)+' m²' if valeur is not None else 'non renseigné'),st['AxNormalH']))
     story.append(Paragraph('Paramètres de revalorisation',st['AxHeadH']))
     fac=d['facteur']
     for title,val in [('Actualisation départementale 1980',fac['actualisation_1980']),
@@ -86,12 +106,20 @@ def generer_pdf_habitation(d):
         valeurs = [x[cle] for x in comparables]
         story.append(Paragraph('Fourchette des séries de la catégorie '+ph(d['categorie'])+' : '+eur(min(valeurs))+' à '+eur(max(valeurs))+' ('+ph(label)+', pour le nombre de pièces chauffées déclaré).',st['AxNormalH']))
     if d.get('dependances'):
-        story.append(Paragraph('Dépendances déclarées — cadre 5 H2',st['AxHeadH']))
+        story.append(Paragraph('Dépendances déclarées — cadre 5 '+('H1' if d.get('h1') else 'H2'),st['AxHeadH']))
         for dependance in d['dependances']:
             description = (ph(dependance['designation'])+' ; lot : '+ph(dependance.get('lot') or 'non précisé')
                 +' ; situation : '+ph(dependance.get('situation') or 'non précisée')
                 +' ; surface : '+ph(dependance['surface'])+' m² ; '+ph(MODES[dependance['mode']]))
-            if dependance['mode']=='incorporee':
+            if dependance.get('batiment') or dependance.get('etage_description'):
+                description += ' ; bâtiment : '+ph(dependance.get('batiment') or 'non précisé')+' ; étage : '+ph(dependance.get('etage_description') or 'non précisé')
+            if dependance.get('composition'):
+                description += ' ; surfaces H1 : '+', '.join(ph(SURFACES_DEP_H1[k])+' '+ph(v['surface'])+' m²'+(' x '+ph(v['coefficient']) if dependance['mode']=='incorporee' else '') for k,v in dependance['composition'].items() if v['surface'])
+                description += ' ; murs : '+ph(', '.join(dependance.get('materiaux_murs',[])) or 'non renseignés')+' ; toiture : '+ph(', '.join(dependance.get('materiaux_toitures',[])) or 'non renseignée')
+                description += ' ; entretien : '+ph(dependance.get('etat_entretien') or 'non renseigné')+' ; agrément : '+ph(dependance.get('nature_agrement') or 'non renseigné')
+            if dependance['mode']=='incorporee' and dependance.get('composition'):
+                description += ' ; surface pondérée rattachée : '+ph(dependance['surface_ponderee'])+' m² (coefficients par composante).'
+            elif dependance['mode']=='incorporee':
                 description += (' ; pondération : '+ph(dependance['coefficient'])+' ; surface rattachée avant correctifs : '
                     +ph(dependance['surface_ponderee'])+' m² ; équivalences de confort : '+ph(dependance['equivalence_confort'])+' m². Tarif du logement appliqué après le correctif d’ensemble.')
             story.append(Paragraph(description,st['AxNormalH']))

@@ -1,9 +1,10 @@
 """Dépendances H2 : rattachement explicite, surfaces et bases fiscales distinctes."""
 from math import floor, isfinite
 from decimal import Decimal, ROUND_FLOOR
+from referentiel_formulaires import SURFACES_DEP_H1
 
 TYPES = {'piece': 'Pièce indépendante / chambre de service', 'garage': 'Garage, box ou parking privé',
-         'cave': 'Grenier, cave ou autre rangement', 'agrement': 'Élément de pur agrément'}
+         'cave': 'Grenier, cave ou autre rangement', 'agrement': 'Élément de pur agrément', 'batiment_h1':'Dépendance H1 détaillée'}
 MODES = {'incorporee': 'Rattachée au logement — même tarif', 'distincte': 'Évaluation distincte'}
 
 
@@ -43,6 +44,14 @@ def valider_dependances(lignes):
         r['designation'] = str(r.get('designation') or TYPES[r['type']]).strip()
         r['situation'] = str(r.get('situation') or '').strip()
         r['lot'] = str(r.get('lot') or '').strip()
+        if r['type']=='batiment_h1':
+            composition=r.get('composition', {})
+            if not isinstance(composition,dict) or set(composition)-set(SURFACES_DEP_H1) or any(not isinstance(v,dict) for v in composition.values()):
+                raise ValueError('Rubriques de surfaces H1 invalides.')
+            r['composition']={k:{'surface':nombre(v.get('surface',0),k), 'coefficient':nombre(v.get('coefficient',.4),k)} for k,v in composition.items()}
+            r['surface']=sum(v['surface'] for v in r['composition'].values())
+            if r['mode']=='incorporee' and r['composition'].get('agrement',{}).get('surface',0):
+                raise ValueError('Les éléments de pur agrément doivent être évalués distinctement.')
         r['surface'] = nombre(r.get('surface', 0), f'Dépendance {i}, surface')
         if r['surface'] <= 0:
             raise ValueError(f'Dépendance {i} : renseignez une surface supérieure à zéro.')
@@ -56,6 +65,8 @@ def valider_dependances(lignes):
         r['base_tf'] = None if r.get('base_tf') is None else nombre(r['base_tf'], f'Dépendance {i}, base fiscale')
         r['taux_logement_confirmes'] = bool(r.get('taux_logement_confirmes', False))
         r['surface_ponderee'] = ponderer_surface(r['surface'], r['coefficient']) if r['mode'] == 'incorporee' else 0
+        if r['type']=='batiment_h1' and r['mode']=='incorporee':
+            r['surface_ponderee']=sum(ponderer_surface(v['surface'],v['coefficient']) for v in r['composition'].values() if v['surface'])
         r['equivalence_confort'] = ((4 if r['eau'] else 0) + (2 if r['electricite'] else 0)
             + 3*r['wc'] + 5*r['baignoires'] + 4*r['douches'] + 3*r['lavabos'] + 2*r['pieces_chauffees']) if r['mode'] == 'incorporee' else 0
         resultat.append(r)

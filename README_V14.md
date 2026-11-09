@@ -212,3 +212,32 @@ sans ascenseur. Chaque groupe est arrondi au m² inférieur séparément avant
 addition ; les équivalences de confort sont ajoutées ensuite. Le calcul des
 correctifs utilise Decimal. Régression : 49 × 1,35 → 66 ; (3 + 4) × 1,30 → 9 ;
 66 + 9 + 25 = 100 m². Les mêmes étapes figurent à l’écran et au PDF.
+
+### Présentation H1/H2 alignée sur les formulaires fournis (page 2)
+
+Le H1 suit désormais les rubriques de H1.pdf : 41 A (nombre de pièces et surface
+habitation), 41 B (garages, caves/celliers/bûchers/buanderies, greniers, terrasses
+incorporés avec leur pondération propre), 41 C (partie professionnelle), 42
+(confort), 43 (murs, toitures, entretien, construction, niveaux), puis classement
+et correctifs toujours visibles. Les niveaux comprennent le RDC et excluent
+les greniers ; ils ne créent pas de correctif d’ascenseur pour une maison.
+Les éviers restent exclus ; les équipements non présents au H1 (vide-ordures,
+ascenseur collectif, escalier de service) ne sont pas demandés dans ce parcours.
+Le chauffage conserve sa case et un nombre de pièces librement saisi.
+
+Le cadre 5 H1 dispose du même bouton d’ajout que le H2, avec une décomposition
+par dépendance des surfaces garages, caves, greniers, terrasses et agrément,
+puis équipement (eau/électricité) et caractéristiques (murs, toit, entretien).
+Le mode de traitement rattaché/distinct reste un choix explicite. Les éléments
+de pur agrément requièrent une évaluation distincte ; aucune piscine n’est
+valorisée automatiquement avec le tarif d’habitation. Le cadre 6 recueille les
+emprises au sol à titre descriptif, sans les ajouter aux surfaces fiscales.
+Les caractéristiques de construction n’attribuent pas automatiquement de
+catégorie et n’ajoutent aucun coefficient non documenté.
+
+La page 2 du H2 (6652_4004.pdf) a également été revue : les dépendances conservent
+leur lot, leur désignation et leur surface, avec des précisions de bâtiment et
+d’étage. Les parcours H1/H2 gardent des listes de dépendances distinctes en
+session. Les données de la maison et des dépendances sont reprises dans le
+récapitulatif et le PDF. La première page administrative des formulaires n’est
+pas reproduite. Aucune identité, signature ou coordonnées de déclarant n’est demandée.
