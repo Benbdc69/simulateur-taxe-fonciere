@@ -7,7 +7,8 @@ from session_calcul import bouton_nouveau_calcul
 
 st.set_page_config(page_title="Simulateur TF | Axens", page_icon="🏢",layout="wide",initial_sidebar_state="collapsed")
 st.markdown("""<style>
-.block-container{max-width:1120px;padding-top:1.6rem}
+.block-container{max-width:1120px}
+.stApp [data-testid="stMainBlockContainer"]{padding-top:5.5rem}
 h1,h2,h3{letter-spacing:-.02em}
 [data-testid="stMetric"]{border-radius:14px;padding:14px;border:1px solid #d7e2ec}
 </style>""",unsafe_allow_html=True)
