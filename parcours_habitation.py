@@ -169,7 +169,8 @@ elif etape == 2:
         source_categorie = st.selectbox('Origine de la catégorie choisie', ['Choix indicatif avec l’aide au classement', 'Catégorie figurant sur ma fiche cadastrale'],
             index=1 if saisie.get('categorie_confirmee') else 0,
             help='Précisez si votre catégorie est documentée ou si elle constitue une hypothèse de simulation.')
-        with st.expander('Correctifs cadastraux — paramètres complémentaires', expanded=maison):
+        st.markdown('#### Correctifs cadastraux — à vérifier pour chaque calcul')
+        with st.container(border=True):
             st.caption('Reprenez les correctifs de la fiche cadastrale si vous les connaissez. À défaut, les correctifs neutres restent des hypothèses de simulation, distinctes de la catégorie choisie.')
             st.markdown('#### État, situation et dépendances')
             st.caption('Ces correctifs décrivent l’état et la situation retenus pour l’évaluation cadastrale. Les valeurs proposées sont des hypothèses à vérifier sur votre fiche.')
