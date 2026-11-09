@@ -49,5 +49,6 @@ pages=[
 ]
 pg=st.navigation(pages,position='hidden')
 if pg.title != 'Accueil':
-    st.page_link('accueil.py', label='Choisir le type de local', icon='🏠')
+    if st.button('Retour à l’accueil', icon='🏠', key='retour_accueil'):
+        st.switch_page('accueil.py')
 pg.run()

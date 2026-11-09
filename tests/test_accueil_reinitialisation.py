@@ -38,6 +38,9 @@ class AccueilEtSaisieTests(unittest.TestCase):
                 champ(at.button, 'Nouveau calcul').click().run()
                 self.assertFalse(at.exception)
                 self.assertIn(titre, [x.value for x in at.title])
+                champ(at.button, 'Retour à l’accueil').click().run()
+                self.assertFalse(at.exception)
+                self.assertEqual([x.label for x in at.button], ['Local professionnel', 'Local d’habitation'])
 
     def test_nouveau_calcul_professionnel_efface_saisies_sans_deconnexion(self):
         at = AppTest.from_file(str(ROOT/'parcours_express.py'))

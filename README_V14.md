@@ -133,7 +133,7 @@ communes portant le nom Saint-Sauveur pendant le développement.
 ### Accueil et nouveau calcul
 
 L’entrée app.py affiche deux boutons : « Local professionnel » et « Local
-d’habitation ». Le lien « Choisir le type de local » permet de revenir à l’accueil.
+d’habitation ». Le bouton « Retour à l’accueil » reste visible en haut de chaque parcours.
 Chaque parcours possède un bouton « Nouveau calcul » qui efface les recherches,
 saisies, résultats et choix de cette session tout en conservant l’authentification.
 L’identité des widgets est renouvelée pour éviter le retour d’anciennes valeurs.
