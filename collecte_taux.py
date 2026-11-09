@@ -21,7 +21,7 @@ def preparer(code_insee,annee,cherche_dgcl=None,cherche_rei=None):
     for y in (year,year-1):
         if y<2017:continue
         publishers=[]
-        if y in (2025,2026):publishers.append(('DGCL',search_dgcl))
+        if y >= 2025:publishers.append(('DGCL',search_dgcl))
         if y == 2025:publishers.append(('DGFiP / REI détaillé',search_rei))
         for nom,call in publishers:
             try:

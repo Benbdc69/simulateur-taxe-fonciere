@@ -8,6 +8,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 import streamlit as st
+from session_calcul import bouton_nouveau_calcul, cle_calcul
 from cadastre import adresses, parcelles_a_l_adresse
 from recherche_bien import saisir_reference, identifier_par_reference, libelle_parcelle, saisir_commune
 from moteur import (COEFF_SURFACES, TAXES, insee_cadastral_adresse,
@@ -174,6 +175,7 @@ div.stButton > button[kind="primary"],div.stFormSubmitButton > button[kind="prim
 div.stButton > button[kind="primary"]:hover,div.stFormSubmitButton > button[kind="primary"]:hover{background:#164C79!important;border-color:#164C79!important}
 @media (max-width: 640px){.tf-detail-table{font-size:.88rem}.tf-tax-card{min-height:0}}
 </style>''',unsafe_allow_html=True)
+bouton_nouveau_calcul()
 st.title('Estimez votre taxe foncière')
 st.caption('Locaux professionnels · Déclaration 6660-REV · Informations fiscales récupérées automatiquement')
 
@@ -187,15 +189,15 @@ cat_codes=list(cat_map)
 st.info('Préparez votre déclaration 6660-REV ou votre fiche d’évaluation cadastrale. Les surfaces se saisissent en m² réels : la pondération est automatique.')
 with st.container(border=True):
     st.markdown('#### 1 · Identifier votre local')
-    mode_recherche = st.radio('Rechercher le bien par', ['Adresse', 'Parcelle cadastrale'], horizontal=True, key='express_mode')
+    mode_recherche = st.radio('Rechercher le bien par', ['Adresse', 'Parcelle cadastrale'], horizontal=True, key=cle_calcul('express_mode'))
     reference = {}
     adresse = ''
     if mode_recherche == 'Adresse':
-        adresse=st.text_input('Adresse complète du bien',placeholder='Ex. 18 cours Gambetta, 69007 Lyon', help='Indiquez le numéro, la voie, le code postal et la commune du local imposé, et non votre adresse de correspondance. Pour Lyon, précisez l’arrondissement.')
+        adresse=st.text_input('Adresse complète du bien',key=cle_calcul('express_adresse'),placeholder='Numéro, voie, code postal et commune', help='Indiquez le numéro, la voie, le code postal et la commune du local imposé, et non votre adresse de correspondance. Pour Lyon, précisez l’arrondissement.')
     else:
-        automatique, selection_commune = saisir_commune('express_ref')
-        reference = saisir_reference('express_ref', automatique=automatique, selection=selection_commune)
-    categorie=st.selectbox('Catégorie du local', cat_codes,
+        automatique, selection_commune = saisir_commune(cle_calcul('express_ref'))
+        reference = saisir_reference(cle_calcul('express_ref'), automatique=automatique, selection=selection_commune)
+    categorie=st.selectbox('Catégorie du local', cat_codes,key=cle_calcul('express_categorie'),
         index=None, placeholder='Sélectionnez la catégorie figurant sur votre document',
         format_func=lambda code:f"{code} — {cat_map[code]['description']}",
         help='Reprenez le code fiscal de la déclaration 6660-REV ou de la fiche cadastrale (ex. BUR2). Il décrit la nature et l’utilisation du local ; ce n’est pas un code d’activité NAF.')
@@ -216,22 +218,22 @@ with st.container(border=True):
     cols=st.columns(3)
     for i,(k,v) in enumerate(labels.items()):
         with cols[i%3]:
-            surfaces[k]=st.number_input(v,min_value=0.0,max_value=1_000_000.0,step=1.0,key='express_'+k,help=aides_surfaces[k])
+            surfaces[k]=st.number_input(v,min_value=0.0,max_value=1_000_000.0,step=1.0,key=cle_calcul('express_'+k),help=aides_surfaces[k])
     with st.expander('Comment les surfaces sont-elles prises en compte ?'):
         st.write('Exemple : si votre déclaration indique 100 m² en P1 et 20 m² en P2, saisissez 100 et 20, sans réduire vous-même la surface secondaire.')
         st.write('Pondérations appliquées : '+', '.join(f'{k} × {v:g}' for k,v in COEFF_SURFACES.items())+'. Le classement de chaque surface reste celui de votre déclaration.')
         st.caption(f"Surface pondérée issue de votre saisie : {sum(surfaces[k]*v for k,v in COEFF_SURFACES.items()):,.2f} m²".replace(',', ' '))
     st.markdown('#### 3 · Préciser l’année et l’historique')
     st.caption('L’année est celle de l’avis que vous souhaitez estimer. Les informations historiques permettent de préciser les correctifs applicables.')
-    annee=int(st.number_input('Année d’imposition', min_value=2017, max_value=2026, value=2026, step=1, format='%d', help='Choisissez l’année d’imposition de l’avis, pas l’année de déclaration ou d’achat. Le moteur couvre 2017 à 2026 ; les règles à partir de 2027 ne sont pas encore intégrées.'))
-    construction_nouvelle=st.checkbox('Construction nouvelle, reconstruction ou addition de construction (hors habitation)', value=False,
+    annee=int(st.number_input('Année d’imposition',key=cle_calcul('express_annee'), min_value=2017, max_value=2026, value=2026, step=1, format='%d', help='Choisissez l’année d’imposition de l’avis, pas l’année de déclaration ou d’achat. Le moteur couvre 2017 à 2026 ; les règles à partir de 2027 ne sont pas encore intégrées.'))
+    construction_nouvelle=st.checkbox('Construction nouvelle, reconstruction ou addition de construction (hors habitation)', value=False,key=cle_calcul('express_neuf'),
         help='Cochez uniquement pour une construction nouvelle, une reconstruction ou une addition de construction, pas pour un simple achat ou changement de locataire. Exonération temporaire de 40 % de la part communale et des taxes additionnelles éligibles (GEMAPI, TSE et syndicats sans fiscalité propre), sous conditions.')
     annee_achevement=None
     if construction_nouvelle:
-        annee_achevement=st.number_input('Année d’achèvement des travaux',min_value=1900,max_value=annee, value=max(1900,annee-1),step=1,help='Année où les travaux permettent l’utilisation effective du bien. Ce n’est pas nécessairement l’année du permis, de l’achat ou de la déclaration fiscale.')
+        annee_achevement=st.number_input('Année d’achèvement des travaux',key=cle_calcul('express_achevement'),min_value=1900,max_value=annee, value=max(1900,annee-1),step=1,help='Année où les travaux permettent l’utilisation effective du bien. Ce n’est pas nécessairement l’année du permis, de l’achat ou de la déclaration fiscale.')
         st.caption('Sous réserve de déclaration dans les 90 jours : 40 % pour la commune, les syndicats sans fiscalité propre, la TSE et la GEMAPI ; pas pour l’EPCI à fiscalité propre ni la TEOM.')
     historique = st.selectbox(
-        'Le local existait-il comme local professionnel au 1er janvier 2017 ?',
+        'Le local existait-il comme local professionnel au 1er janvier 2017 ?',key=cle_calcul('express_historique'),
         options=['inconnu', 'ancien', 'recent'],
         format_func=lambda v: {
             'inconnu': 'Je ne sais pas',
@@ -248,7 +250,7 @@ with st.container(border=True):
             cols_plan = st.columns(2)
             for i,(cle,libelle) in enumerate(TAXES.items()):
                 with cols_plan[i % 2]:
-                    corrections_brutes[cle] = st.text_input(libelle+' · correction de base (€)', value='', key='plan_'+cle, placeholder='ex. -125,50', help='Montant signé de correction de base imposable pour cette taxe et cette année, justifié par votre fiche fiscale. Vide = inconnu ; 0 = correction nulle confirmée. Ce champ ne reçoit ni le montant de taxe payé ni un taux.')
+                    corrections_brutes[cle] = st.text_input(libelle+' · correction de base (€)', value='', key=cle_calcul('plan_'+cle), placeholder='ex. -125,50', help='Montant signé de correction de base imposable pour cette taxe et cette année, justifié par votre fiche fiscale. Vide = inconnu ; 0 = correction nulle confirmée. Ce champ ne reçoit ni le montant de taxe payé ni un taux.')
     signature=json.dumps([mode_recherche,reference,adresse,categorie,surfaces,annee,construction_nouvelle,annee_achevement,historique,corrections_brutes],sort_keys=True)
     if st.session_state.get('_express_saisie') != signature:
         st.session_state.pop('_calcul_express',None)

@@ -20,8 +20,10 @@ def facteur_departement_annee(code_insee,annee,commune=''):
     y=str(int(annee)); dep=departement_insee(code_insee)
     if dep is None:raise ValueError('Le référentiel 1970 métropolitain ne couvre pas les DROM/Mayotte.')
     data=json.loads(FICHIER.read_text(encoding='utf-8'))
-    national=data['coefficients_amalgames_1981_2026'].get(y)
-    if national is None:raise ValueError('Coefficient annuel indisponible pour le millésime demandé.')
+    national=data.get('coefficients_amalgames', {}).get(y)
+    if national is None:
+        national=data.get('coefficients_amalgames_1981_2026', {}).get(y)
+    if national is None:raise ValueError(f'Coefficient officiel de revalorisation {y} non disponible dans le référentiel. Le millésime doit être actualisé avant de chiffrer cette année ; aucun coefficient antérieur n’est extrapolé.')
     actual=data['coefficient_1980'].get(dep)
     if actual is None:raise ValueError('Coefficient départemental 1980 non renseigné.')
     if dep in ('21','54'):
@@ -34,8 +36,13 @@ def facteur_departement_annee(code_insee,annee,commune=''):
         else:
             spec=data['exceptions_1980'][dep]
             actual=spec['coefficient'] if _norm(spec['commune']) in v else spec['autres']
+    source = data.get('sources_revalorisation', {}).get(y)
+    if source is None:
+        if int(annee) > 2026:
+            raise ValueError(f'Source du coefficient officiel {y} non renseignée.')
+        source = data['source_2026'] if int(annee)>=2026 else data['source_2025'] if int(annee)>=2025 else data['source_1980']
     return {'departement':dep,'annee':int(annee),'actualisation_1980':float(actual),
             'revalorisation_nationale':float(national),'coefficient_cumule':round(float(actual)*float(national),9),
             'source_departement':data['source_1980'],
-            'source_revalorisation':data['source_2026'] if int(annee)>=2026 else data['source_2025'] if int(annee)>=2025 else data['source_1980'],
+            'source_revalorisation':source,
             'precision':data['precision']}

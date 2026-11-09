@@ -129,3 +129,26 @@ nom ou le département invalide les anciens résultats. La recherche est exécut
 uniquement sur clic, avant la saisie de la section et du numéro de parcelle.
 La résolution réelle a été vérifiée pour Andrézieux-Bouthéon, Lyon et des
 communes portant le nom Saint-Sauveur pendant le développement.
+
+### Accueil et nouveau calcul
+
+L’entrée app.py affiche deux boutons : « Local professionnel » et « Local
+d’habitation ». Le lien « Choisir le type de local » permet de revenir à l’accueil.
+Chaque parcours possède un bouton « Nouveau calcul » qui efface les recherches,
+saisies, résultats et choix de cette session tout en conservant l’authentification.
+L’identité des widgets est renouvelée pour éviter le retour d’anciennes valeurs.
+Les adresses démarrent vides, sans l’exemple Gambetta ; les cases de confort
+sont décochées et les quantités d’équipements à zéro.
+
+### Millésime habitation sans plafond de saisie
+
+L’année d’imposition est saisie numériquement, sans liste limitée à 2024–2026.
+La collecte tente les fichiers DGCL du millésime demandé et du précédent selon
+le modèle d’URL existant, sous réserve de publication et de format compatible.
+Un taux antérieur conserve son année source. Les coefficients habitation
+restent documentés dans data/habitation_facteurs.json : aucune revalorisation
+future n’est extrapolée si elle manque. Le schéma extensible
+« coefficients_amalgames » et « sources_revalorisation », indexés par année,
+permet d’ajouter des millésimes après 2026 sans changer les fonctions de calcul.
+La récupération automatique d’un nouveau coefficient de revalorisation n’est
+pas implémentée : son intégration documentée au référentiel reste nécessaire.

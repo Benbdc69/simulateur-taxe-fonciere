@@ -26,8 +26,8 @@ def code_reference(code_insee):
 def _annee(y):
     try: annee=int(y)
     except (ValueError,TypeError): raise ValueError('Millésime du taux invalide.') from None
-    if not 2017 <= annee <= 2026:
-        raise ValueError('Millésime de taux hors du périmètre 2017-2026.')
+    if not 2017 <= annee <= 9999:
+        raise ValueError('Millésime de taux invalide : année attendue à partir de 2017.')
     return annee
 
 

@@ -1,10 +1,12 @@
 """Parcours guidé H1/H2 : adresse confirmée, saisie expliquée, calcul traçable."""
 from __future__ import annotations
 import json
+from datetime import date
 from html import escape
 from classement_habitation import CLASSEMENT, CRITERES, libelle_categorie
 from pathlib import Path
 import streamlit as st
+from session_calcul import bouton_nouveau_calcul, cle_calcul
 from cadastre import adresses
 from recherche_bien import saisir_reference, identifier_par_reference, saisir_commune
 from historique_taux import resoudre_tout, COMPOSANTES, LIBELLES
@@ -43,6 +45,7 @@ def aller(etape):
     st.rerun()
 
 
+bouton_nouveau_calcul()
 st.title('Estimez la taxe foncière de votre logement')
 st.caption('Maison H1 ou appartement H2 · Estimation indicative, hors frais de gestion et exonérations particulières.')
 st.info('Préparez votre déclaration H1/H2 ou votre fiche d’évaluation cadastrale si vous en disposez. L’aide au classement vous accompagne pour choisir une catégorie ; plusieurs séries pourront être comparées dans cette catégorie.')
@@ -53,25 +56,25 @@ st.progress(etape / 3, text=f'Étape {etape} sur 3 · ' + {1: 'Votre logement', 
 if etape == 1:
     st.subheader('1 · Identifier le logement')
     mode_recherche = st.radio('Rechercher le bien par', ['Adresse', 'Parcelle cadastrale'], horizontal=True,
-        index=1 if saisie.get('mode_recherche') == 'Parcelle cadastrale' else 0, key='hab_mode')
+        index=1 if saisie.get('mode_recherche') == 'Parcelle cadastrale' else 0, key=cle_calcul('hab_mode'))
     automatique, selection_commune = (False, None)
     if mode_recherche == 'Parcelle cadastrale':
-        automatique, selection_commune = saisir_commune('hab_ref', saisie.get('reference'))
-    with st.form('hab_adresse'):
+        automatique, selection_commune = saisir_commune(cle_calcul('hab_ref'), saisie.get('reference'))
+    with st.form(cle_calcul('hab_adresse')):
         reference = {}
         adresse = ''
         if mode_recherche == 'Adresse':
             adresse = st.text_input('Adresse du bien', value=saisie.get('recherche', ''),
-                placeholder='18 cours Gambetta, 69007 Lyon',
+                placeholder='Numéro, voie, code postal et commune',
                 help='Saisissez le numéro, la voie, le code postal et la commune du logement imposé.')
         else:
-            reference = saisir_reference('hab_ref', saisie.get('reference'), automatique=automatique, selection=selection_commune)
+            reference = saisir_reference(cle_calcul('hab_ref'), saisie.get('reference'), automatique=automatique, selection=selection_commune)
         nature = st.radio('Type de logement', ['Appartement (H2)', 'Maison (H1)'],
             index=1 if saisie.get('nature') == 'M' else 0, horizontal=True,
             help='H1 correspond aux maisons ; H2 aux appartements. Ce choix détermine le barème de surface et le traitement des dépendances.')
-        annee = st.selectbox('Année d’imposition', [2026, 2025, 2024],
-            index=[2026, 2025, 2024].index(saisie.get('annee', 2026)),
-            help='Année de l’avis de taxe foncière à estimer, et non année d’achat. Les tarifs publics de référence 1970 sont revalorisés jusqu’à cette année.')
+        annee = st.number_input('Année d’imposition', min_value=2017, value=int(saisie.get('annee', date.today().year)), step=1,
+            help='Année de l’avis à estimer, sans plafond de saisie. Le calcul nécessite les coefficients officiels de cette année ; une donnée absente n’est pas extrapolée.')
+        st.caption('Vous pouvez saisir une année future. Si son coefficient officiel n’est pas encore intégré, le simulateur vous l’indiquera sans inventer de montant.')
         chercher = st.form_submit_button('Rechercher cette adresse' if mode_recherche == 'Adresse' else 'Rechercher cette parcelle', type='primary')
     if chercher:
         saisie.update(mode_recherche=mode_recherche, reference=reference, recherche=adresse.strip(), nature='M' if nature.startswith('Maison') else 'A', annee=int(annee))
@@ -106,7 +109,7 @@ elif etape == 2:
     params = saisie.get('parametres', {})
     maison = saisie['nature'] == 'M'
     h2 = saisie.get('h2', {})
-    with st.form('hab_description'):
+    with st.form(cle_calcul('hab_description')):
         pieces_h2 = {}
         if not maison:
             st.markdown('#### 41 · Consistance du logement — H2')
@@ -183,9 +186,9 @@ elif etape == 2:
         a, b = st.columns(2)
         quantites = {}
         for i, (cle, libelle, valeur, aide) in enumerate([
-            ('wc', 'WC privatifs', 1, 'Nombre de WC privatifs dans le logement. Ne comptez pas les sanitaires communs de l’immeuble.'),
-            ('lavabos', 'Lavabos et éviers' if not maison else 'Lavabos', 1, 'Nombre de lavabos et éviers, y compris les éviers de cuisine : le H2 les regroupe dans la même rubrique.'),
-            ('douches', 'Douches', 1, 'Nombre de douches. Ne comptez pas une baignoire équipée d’un flexible comme un second appareil distinct.'),
+            ('wc', 'WC privatifs', 0, 'Nombre de WC privatifs dans le logement. Ne comptez pas les sanitaires communs de l’immeuble.'),
+            ('lavabos', 'Lavabos et éviers' if not maison else 'Lavabos', 0, 'Nombre de lavabos et éviers, y compris les éviers de cuisine : le H2 les regroupe dans la même rubrique.'),
+            ('douches', 'Douches', 0, 'Nombre de douches. Ne comptez pas une baignoire équipée d’un flexible comme un second appareil distinct.'),
             ('baignoires', 'Baignoires', 0, 'Nombre de baignoires. Évitez de compter deux fois un même équipement dans la rubrique douches.'),
             ('pieces_chauffees', 'Pièces avec chauffage admissible', 0, 'Nombre de pièces disposant d’un chauffage fixe assimilable au chauffage central pour l’évaluation cadastrale. Ne comptez pas les couloirs ou WC ; des radiateurs mobiles seuls ne suffisent pas.'),
         ] if maison else [
@@ -206,7 +209,7 @@ elif etape == 2:
             ('vide_ordures', 'Vide-ordures', False, 'Installation de vide-ordures. Un local à poubelles ou un bac de collecte ne correspond pas à cet équipement.'),
         ]):
             with [a, b][i % 2]:
-                equipements[cle] = st.checkbox(libelle, value=params.get(cle, valeur if maison else False), help=aide)
+                equipements[cle] = st.checkbox(libelle, value=params.get(cle, False), help=aide)
         chauffage = False
         escalier_service = False
         ascenseur = False

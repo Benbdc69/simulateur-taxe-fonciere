@@ -38,8 +38,8 @@ def code_commune_fiscale(code):
 
 
 def controle_codes(annee, code):
-    if not 2017 <= int(annee) <= 2026:
-        raise ValueError('Le moteur ne couvre pas les impositions après 2026.')
+    if not 2017 <= int(annee) <= 9999:
+        raise ValueError('Millésime de taux invalide : année attendue à partir de 2017.')
     if not re.fullmatch(r'(?:\d{5}|2[AB]\d{3})', _code(code)):
         raise ValueError('Code INSEE commune invalide.')
 
@@ -58,8 +58,8 @@ def _get(session, url, params=None, timeout=35):
 
 
 def source_tableur(annee, nature):
-    if int(annee) not in (2025,2026) or nature not in ('communes','EPCI'):
-        raise ValueError('Les liens de tableurs DGCL sont vérifiés uniquement pour 2025 et 2026.')
+    if not 2025 <= int(annee) <= 9999 or nature not in ('communes','EPCI'):
+        raise ValueError('Le modèle de lien DGCL concerne les années à partir de 2025 et les fichiers communes ou EPCI. La disponibilité du fichier doit être vérifiée au téléchargement.')
     return DGCL_URL.format(annee=int(annee),nature=nature)
 
 
@@ -233,8 +233,8 @@ def rechercher_dgcl(code_insee,annee,session=None,fichier_communes=None,fichier_
     Les fichiers (bytes, URL) optionnels permettent l'import manuel hors réseau.
     """
     controle_codes(annee,code_insee)
-    if int(annee) not in (2025,2026):
-        raise ValueError('Importation directe DGCL proposée pour les millésimes 2025 et 2026.')
+    if not 2025 <= int(annee) <= 9999:
+        raise ValueError('Importation DGCL proposée à partir du millésime 2025, sous réserve de publication du fichier officiel.')
     sess=session or requests.Session()
     taux={}; details={}; avertissements=[]
     source_urls={}
