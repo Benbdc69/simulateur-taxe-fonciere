@@ -300,7 +300,7 @@ else:
                 st.error('Estimation indisponible : ' + str(exc))
 
     r = st.session_state.get('hab_resultat')
-    if r and (not saisie.get('categorie') or r.get('categorie') != saisie.get('categorie') or any('detail_terrasse' not in t.get('surfaces', {}) for t in r.get('tarifs', []))):
+    if r and (not saisie.get('categorie') or r.get('categorie') != saisie.get('categorie') or any(('detail_terrasse' not in t.get('surfaces', {}) or 'detail_surface_nette' not in t.get('surfaces', {})) for t in r.get('tarifs', []))):
         st.session_state.pop('hab_resultat', None)
         r = None
         st.info('Les paramètres de calcul ont changé. Vérifiez les informations puis relancez le calcul pour actualiser le résultat.')
@@ -342,7 +342,7 @@ else:
         sp = x['surfaces']
         if sp.get('terrasse_ponderee', 0) or r.get('terrasse_reelle', 0):
             t = sp['detail_terrasse']
-            st.info(f"Terrasse intégrée : {t['surface_declaree']:g} m² déclarés → {t['surface_reelle_retenue']} m² réels retenus × {t['coefficient']:g} → {t['surface_ponderee']} m² pondérés après arrondi inférieur, ajoutés avant le correctif d’ensemble. Coefficient à confirmer sur la fiche cadastrale.")
+            st.info(f"Terrasse intégrée : {t['surface_declaree']:g} m² déclarés → {t['surface_reelle_retenue']} m² réels retenus × {t['coefficient']:g} → {t['surface_ponderee']} m² pondérés après arrondi inférieur, retenus parmi les éléments secondaires avant leurs correctifs, hors ascenseur. Coefficient à confirmer sur la fiche cadastrale.")
         if sp['dependances_a_evaluer_separement']:
             st.warning('Estimation partielle : des surfaces de dépendances anciennement regroupées ne sont pas ventilées. Précisez leur traitement dans le cadre 5 pour les chiffrer.')
         if not r['taux_complets']:
@@ -354,7 +354,7 @@ else:
         if r['taux'].get('teom') and not r['taux']['teom'].get('zonage_confirme'):
             st.warning('Le zonage TEOM n’est pas confirmé pour cette adresse : la cotisation correspondante reste à vérifier.')
         if sp['nature'] == 'A':
-            st.caption(f"Ascenseur de l’immeuble : {'oui' if sp['detail_correctifs']['ascenseur_immeuble'] else 'non'} · Niveau retenu : {sp['detail_correctifs']['niveau_local']} · Correctif article 324 S : {sp['correctif_ascenseur']:+.2f}, ajouté au correctif d’ensemble avant calcul de la surface nette.")
+            st.caption(f"Ascenseur de l’immeuble : {'oui' if sp['detail_correctifs']['ascenseur_immeuble'] else 'non'} · Niveau retenu : {sp['detail_correctifs']['niveau_local']} · Correctif article 324 S : {sp['correctif_ascenseur']:+.2f}, appliqué à la partie principale uniquement.")
         if 'montants' in x:
             carte_habitation(
                 'Cotisations annuelles estimées — logement et dépendances rattachées', fmt(x['total']),
@@ -390,7 +390,11 @@ else:
                     )
         with st.expander('Comprendre le calcul, étape par étape', expanded=False):
             st.write(f"1. Surface comparative : **{sp['comparative']} m²**, issue du barème de catégorie {x['categorie']}.")
-            st.write(f"2. Ajout des dépendances pondérées retenues : **{sp['annexes_ponderees'] + sp['terrasse_ponderee'] + sp.get('dependances_ponderees', 0)} m²** ; correctif global **× {sp['correctif']}** → surface nette **{sp['surface_nette']} m²**.")
+            net = sp['detail_surface_nette']
+            if net['mode'] == 'separe':
+                st.write(f"2. Partie principale : {sp['comparative']} × {sp['correctif']} = {net['principal_brut']:g} → **{net['principal_net']} m²**. Éléments secondaires : {net['secondaires_ponderes']} × {net['coefficient_secondaires']} = {net['secondaires_brut']:g} → **{net['secondaires_net']} m²**, sans correctif d’ascenseur. Total net : **{sp['surface_nette']} m²**.")
+            else:
+                st.write(f"2. Surface pondérée brute : {net['surface_brute']} m² × {sp['correctif']} → **{sp['surface_nette']} m² nets**.")
             st.write(f"3. Équipements : **+ {sp['equivalence_confort']} m²** → surface pondérée **{sp['surface_ponderee']} m²**.")
             st.table([{'Équipement': k, 'Équivalence (m²)': v} for k, v in sp['detail_confort'].items() if v])
             st.write(f"4. Valeur locative 1970 : {sp['surface_ponderee']} m² × {fmt(x['tarif_1970'])}/m² = **{fmt(x['vl_1970'])}**.")

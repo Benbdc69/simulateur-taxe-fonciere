@@ -95,6 +95,24 @@ class DependancesCalculTests(unittest.TestCase):
         self.assertEqual(surface_totale(45,'A','5',terrasse=12.9,coeff_terrasse=.4)['terrasse_ponderee'],4)
         self.assertEqual(surface_totale(45,'A','5',terrasse=50.,coeff_terrasse=.58)['terrasse_ponderee'],29)
 
+    def test_cas_signale_surface_totale_100_m2(self):
+        sp=surface_totale(45,'A','5',entretien='Bon',situation_generale='Excellente',
+            etage=2,ascenseur=True,terrasse=12,coeff_terrasse=.4,pieces_chauffees=3,
+            dependances=[dict(type='cave',mode='incorporee',surface=8,coefficient=.4)])
+        self.assertEqual(sp['detail_surface_nette']['principal_net'],66)
+        self.assertEqual(sp['detail_surface_nette']['secondaires_net'],9)
+        self.assertEqual(sp['surface_nette'],75)
+        self.assertEqual(sp['equivalence_confort'],25)
+        self.assertEqual(sp['surface_ponderee'],100)
+
+    def test_correctifs_et_arrondis_separes_sans_ascenseur_sur_secondaires(self):
+        sp=surface_totale(45,'A','5',entretien='Bon',situation_generale='Excellente',
+            etage=2,ascenseur=True,pieces_chauffees=3,
+            dependances=[dict(type='cave',mode='incorporee',surface=15,coefficient=.6)])
+        self.assertEqual(sp['detail_surface_nette']['principal_net'],66)
+        self.assertEqual(sp['detail_surface_nette']['secondaires_net'],11)
+        self.assertEqual(sp['surface_ponderee'],102)
+
     def test_validation_choix_surface_et_quantites(self):
         for d in [dict(type='garage',surface=12),dict(type='garage',mode='incorporee',surface=0),
                   dict(type='garage',mode='incorporee',surface=12,coefficient=.9),

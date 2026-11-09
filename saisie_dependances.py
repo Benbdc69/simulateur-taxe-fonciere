@@ -38,7 +38,7 @@ def saisir_dependances(valeurs, annee):
                 ligne['mode'] = st.selectbox('Traitement fiscal de cette dépendance', modes, index=modes.index(ligne.get('mode')), format_func=lambda v: MODES.get(v, 'Choisissez le traitement'), key=cle+'_mode', help='Un garage peut avoir sa propre évaluation. Vérifiez le rattachement sur la fiche cadastrale ; aucune dépendance n’est automatiquement incorporée.')
             if ligne['mode'] == 'incorporee':
                 ligne['coefficient'] = st.number_input('Coefficient de pondération', min_value=.2, max_value=.6, value=float(ligne.get('coefficient', .4)), step=.05, key=cle+'_coefficient', help='Reprenez le coefficient de la fiche cadastrale. La valeur initiale 0,4 est une hypothèse à confirmer.')
-                st.caption('La surface pondérée est ajoutée avant le correctif d’ensemble du logement ; le tarif de la catégorie et de la série sélectionnées est ensuite appliqué. Ne comptez pas deux fois les mêmes équipements.')
+                st.caption('La surface pondérée rejoint le groupe des éléments secondaires, corrigé et arrondi séparément, sans correctif d’ascenseur ; le même tarif est ensuite appliqué. Ne comptez pas deux fois les mêmes équipements.')
             if ligne['mode'] == 'distincte':
                 if ligne.get('annee_base') != annee:
                     ligne.update(base_tf=None, taux_logement_confirmes=False, annee_base=annee)

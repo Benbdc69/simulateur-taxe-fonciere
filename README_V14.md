@@ -203,3 +203,12 @@ Exemple : 12 m² × 0,4 → 4 m² pondérés retenus. Le calcul utilise Decimal 
 de la représentation binaire des nombres. Le détail apparaît à l’écran et au PDF.
 Référence vérifiée : brochure DGFiP IDL 2025, page 23, articles 324 M et 324 N.
 Les dépendances du cadre 5 conservent leur propre choix rattaché/distinct.
+
+### Arrondis H2 des parties principale et secondaire
+
+La partie principale reçoit les correctifs d’entretien/situation et d’ascenseur.
+Les éléments secondaires rattachés reçoivent les correctifs d’entretien/situation
+sans ascenseur. Chaque groupe est arrondi au m² inférieur séparément avant
+addition ; les équivalences de confort sont ajoutées ensuite. Le calcul des
+correctifs utilise Decimal. Régression : 49 × 1,35 → 66 ; (3 + 4) × 1,30 → 9 ;
+66 + 9 + 25 = 100 m². Les mêmes étapes figurent à l’écran et au PDF.

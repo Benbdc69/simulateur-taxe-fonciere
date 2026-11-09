@@ -5,6 +5,7 @@ le tarif d'habitation du logement. Simulation indicative hors exonérations et f
 from __future__ import annotations
 from math import floor, isfinite
 import re
+from decimal import Decimal, ROUND_FLOOR
 from dependances_habitation import valider_dependances, ponderer_surface, SOURCE_PONDERATION
 
 MAISON={1:(3.00,400),2:(2.50,320),3:(2.10,240),4:(1.70,160),5:(1.45,110),6:(1.30,80),7:(1.20,60),8:(1.10,40)}
@@ -81,8 +82,22 @@ def surface_totale(surface,nature,categorie,annexes=0,coeff_annexes=.4,
     annexe_calc=ponderer_surface(annexes, coeff_annexes) if nature=='M' else 0
     terrasse_calc=ponderer_surface(terrasse, coeff_terrasse)
     asc=_ascenseur(etage,ascenseur) if nature=='A' else 0.
-    correctif=ENTRETIEN[entretien]+SITUATION[situation_generale]+SITUATION[situation_particuliere]+asc
-    nette=floor((comparaison+annexe_calc+terrasse_calc+dependances_ponderees)*correctif)
+    base = Decimal(str(ENTRETIEN[entretien])) + Decimal(str(SITUATION[situation_generale])) + Decimal(str(SITUATION[situation_particuliere]))
+    coefficient_principal = base + Decimal(str(asc))
+    correctif = float(coefficient_principal)
+    secondaires = annexe_calc + terrasse_calc + dependances_ponderees
+    if nature == 'A':
+        principal_brut = Decimal(comparaison) * coefficient_principal
+        secondaires_brut = Decimal(secondaires) * base
+        principal_net = int(principal_brut.to_integral_value(rounding=ROUND_FLOOR))
+        secondaires_net = int(secondaires_brut.to_integral_value(rounding=ROUND_FLOOR))
+        nette = principal_net + secondaires_net
+        detail_nette = dict(mode='separe', principal_brut=float(principal_brut), principal_net=principal_net,
+            secondaires_ponderes=secondaires, coefficient_secondaires=float(base),
+            secondaires_brut=float(secondaires_brut), secondaires_net=secondaires_net)
+    else:
+        nette = int((Decimal(comparaison+secondaires)*base).to_integral_value(rounding=ROUND_FLOOR))
+        detail_nette = dict(mode='ensemble', surface_brute=comparaison+secondaires)
     equip=(4 if eau else 0)+(2 if gaz else 0)+(2 if electricite else 0)
     equip+=5*int(baignoires)+4*int(douches)+3*int(lavabos)+3*int(wc)
     equip+=(3 if egout else 0)+(3 if vide_ordures else 0)+2*int(pieces_chauffees)
@@ -101,7 +116,7 @@ def surface_totale(surface,nature,categorie,annexes=0,coeff_annexes=.4,
     }
     if confort_dependances:
         confort['Équipements propres aux dépendances rattachées'] = confort_dependances
-    return {'detail_terrasse': {'surface_declaree':float(terrasse), 'surface_reelle_retenue':floor(float(terrasse)),
+    return {'detail_surface_nette':detail_nette, 'detail_terrasse': {'surface_declaree':float(terrasse), 'surface_reelle_retenue':floor(float(terrasse)),
                 'coefficient':float(coeff_terrasse), 'surface_ponderee':terrasse_calc, 'source':SOURCE_PONDERATION},
             'detail_dependances':detail_dependances, 'dependances_ponderees':dependances_ponderees,
             'detail_comparative':detail_comparative, 'detail_confort':confort,
