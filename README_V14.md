@@ -94,3 +94,22 @@ correctif d’ensemble avant calcul de la surface nette ; il ne correspond ni à
 un ascenseur intérieur privatif ni à une équivalence de surface supplémentaire.
 Le niveau, la présence d’ascenseur et le coefficient retenu sont tracés à l’écran
 et dans le PDF. Le barème numérique existant est conservé et testé à chaque niveau.
+
+### Recherche par référence cadastrale, sans adresse
+
+Les parcours professionnel et habitation proposent « Adresse » ou « Parcelle
+cadastrale ». Dans ce second mode, saisir commune, code INSEE cadastral, section
+et numéro ; le préfixe est facultatif. Le code INSEE n’est pas le code postal.
+Les sections à une lettre et les numéros courts sont normalisés (A → 0A,
+242 → 0242). Si le préfixe est inconnu, les références distinctes restent
+proposées pour confirmation : aucune parcelle n’est choisie automatiquement.
+
+La recherche utilise directement l’API Cadastre IGN, sans appeler le géocodage.
+La référence confirmée est conservée dans le dossier et le PDF habitation ;
+le parcours professionnel utilise cette parcelle pour identifier les paramètres
+cadastraux. Une parcelle peut contenir plusieurs locaux : le type, la catégorie
+et les surfaces du local doivent toujours être renseignés par l’utilisateur.
+
+Validation : tests des identifiants, préfixes ambigus, codes Corse/DOM, réponses
+incohérentes, absence de résultat, navigation et confirmation dans les deux
+parcours. Un appel réel IGN a retrouvé 42005 / 000 / BI / 0242 pendant le développement.

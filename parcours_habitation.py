@@ -6,6 +6,7 @@ from classement_habitation import CLASSEMENT, CRITERES, libelle_categorie
 from pathlib import Path
 import streamlit as st
 from cadastre import adresses
+from recherche_bien import saisir_reference, identifier_par_reference
 from historique_taux import resoudre_tout, COMPOSANTES, LIBELLES
 from mise_a_jour_simple import synchroniser_taux
 from moteur_habitation import ENTRETIEN, SITUATION, CATEGORIES
@@ -44,48 +45,56 @@ def aller(etape):
 
 st.title('Estimez la taxe foncière de votre logement')
 st.caption('Maison H1 ou appartement H2 · Estimation indicative, hors frais de gestion et exonérations particulières.')
-st.info('Préparez votre déclaration H1/H2 ou votre fiche d’évaluation cadastrale si vous en disposez. Vous pourrez explorer plusieurs scénarios si la catégorie cadastrale est inconnue.')
+st.info('Préparez votre déclaration H1/H2 ou votre fiche d’évaluation cadastrale si vous en disposez. L’aide au classement vous accompagne pour choisir une catégorie ; plusieurs séries pourront être comparées dans cette catégorie.')
 etape = st.session_state.get('hab_etape', 1)
 saisie = st.session_state.setdefault('hab_saisie', {})
 st.progress(etape / 3, text=f'Étape {etape} sur 3 · ' + {1: 'Votre logement', 2: 'Surfaces et équipements', 3: 'Vérification et estimation'}[etape])
 
 if etape == 1:
     st.subheader('1 · Identifier le logement')
+    mode_recherche = st.radio('Rechercher le bien par', ['Adresse', 'Parcelle cadastrale'], horizontal=True,
+        index=1 if saisie.get('mode_recherche') == 'Parcelle cadastrale' else 0, key='hab_mode')
     with st.form('hab_adresse'):
-        adresse = st.text_input('Adresse du bien', value=saisie.get('recherche', ''),
-            placeholder='18 cours Gambetta, 69007 Lyon',
-            help='Saisissez le numéro, la voie, le code postal et la commune du logement imposé. Ce n’est pas votre adresse de correspondance si elle est différente.')
+        reference = {}
+        adresse = ''
+        if mode_recherche == 'Adresse':
+            adresse = st.text_input('Adresse du bien', value=saisie.get('recherche', ''),
+                placeholder='18 cours Gambetta, 69007 Lyon',
+                help='Saisissez le numéro, la voie, le code postal et la commune du logement imposé.')
+        else:
+            reference = saisir_reference('hab_ref', saisie.get('reference'))
         nature = st.radio('Type de logement', ['Appartement (H2)', 'Maison (H1)'],
             index=1 if saisie.get('nature') == 'M' else 0, horizontal=True,
             help='H1 correspond aux maisons ; H2 aux appartements. Ce choix détermine le barème de surface et le traitement des dépendances.')
         annee = st.selectbox('Année d’imposition', [2026, 2025, 2024],
             index=[2026, 2025, 2024].index(saisie.get('annee', 2026)),
             help='Année de l’avis de taxe foncière à estimer, et non année d’achat. Les tarifs publics de référence 1970 sont revalorisés jusqu’à cette année.')
-        chercher = st.form_submit_button('Rechercher cette adresse', type='primary')
+        chercher = st.form_submit_button('Rechercher cette adresse' if mode_recherche == 'Adresse' else 'Rechercher cette parcelle', type='primary')
     if chercher:
-        saisie.update(recherche=adresse.strip(), nature='M' if nature.startswith('Maison') else 'A', annee=int(annee))
+        saisie.update(mode_recherche=mode_recherche, reference=reference, recherche=adresse.strip(), nature='M' if nature.startswith('Maison') else 'A', annee=int(annee))
         st.session_state.pop('hab_adresses', None)
         saisie.pop('adresse', None)
-        if len(adresse.strip()) < 6:
+        if mode_recherche == 'Adresse' and len(adresse.strip()) < 6:
             st.error('Renseignez une adresse complète avec le numéro, la voie et la commune.')
         else:
             try:
-                with st.spinner('Recherche de l’adresse…'):
-                    st.session_state['hab_adresses'] = adresses(adresse)
+                with st.spinner('Recherche du bien…'):
+                    st.session_state['hab_adresses'] = adresses(adresse) if mode_recherche == 'Adresse' else identifier_par_reference(reference)
                 if not st.session_state['hab_adresses']:
-                    st.warning('Aucune adresse trouvée. Précisez le numéro, le code postal et la commune.')
+                    st.warning('Aucun bien trouvé. Vérifiez l’adresse ou les références cadastrales saisies.')
             except (ConnectionError, ValueError) as exc:
-                st.error('Recherche d’adresse indisponible : ' + str(exc))
+                st.error('Recherche du bien indisponible : ' + str(exc))
     options = st.session_state.get('hab_adresses', [])
     # Un ancien résultat de recherche ne valide jamais une nouvelle saisie.
-    recherche_actuelle = (adresse.strip(), 'M' if nature.startswith('Maison') else 'A', int(annee))
-    recherche_sauvee = (saisie.get('recherche'), saisie.get('nature'), saisie.get('annee'))
+    recherche_actuelle = (mode_recherche, reference, adresse.strip(), 'M' if nature.startswith('Maison') else 'A', int(annee))
+    recherche_sauvee = (saisie.get('mode_recherche', 'Adresse'), saisie.get('reference', {}), saisie.get('recherche'), saisie.get('nature'), saisie.get('annee'))
     if options and recherche_actuelle == recherche_sauvee:
-        choix = st.selectbox('Confirmez l’adresse du logement', range(len(options)), index=None,
-            placeholder='Choisissez l’adresse exacte', format_func=lambda i: options[i]['libelle'],
+        choix = st.selectbox('Confirmez l’adresse du logement' if mode_recherche == 'Adresse' else 'Confirmez la parcelle du logement', range(len(options)), index=None,
+            placeholder='Sélectionnez le bien exact', format_func=lambda i: options[i]['libelle'],
             key='hab_adresse_choix', help='Vérifiez la commune et l’arrondissement. La recherche peut proposer plusieurs adresses ; aucune n’est choisie automatiquement.')
         if st.button('Continuer vers les surfaces', type='primary', disabled=choix is None):
             saisie['adresse'] = options[choix]
+            saisie['parcelle'] = options[choix].get('parcelle')
             aller(2)
 
 elif etape == 2:

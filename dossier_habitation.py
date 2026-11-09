@@ -84,7 +84,7 @@ def calculer_scenarios(saisie, adresse, referentiel, tarifs):
     if not scenarios:
         raise ValueError('Aucun tarif public pour cette commune et ce type de logement'
                          + (f' en catégorie {categorie}.' if categorie else '.'))
-    return {'adresse': adresse['libelle'], 'code_insee': code, 'annee': annee,
+    return {'adresse': adresse['libelle'], 'parcelle': adresse.get('parcelle'), 'code_insee': code, 'annee': annee,
             'nature': 'Maison (H1)' if saisie['nature'] == 'M' else 'Appartement (H2)',
             'categorie': categorie, 'categorie_inconnue': False,
             'categorie_confirmee': bool(saisie.get('categorie_confirmee')), 'facteur': facteur,

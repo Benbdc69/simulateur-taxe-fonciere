@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 import streamlit as st
 from cadastre import adresses, parcelles_a_l_adresse
+from recherche_bien import saisir_reference, identifier_par_reference, libelle_parcelle
 from moteur import (COEFF_SURFACES, TAXES, insee_cadastral_adresse,
                     nom_commune_cadastrale, secteur_automatique,
                     localisation_automatique, neutralisation_avec_teom_reference,
@@ -186,7 +187,13 @@ cat_codes=list(cat_map)
 st.info('Préparez votre déclaration 6660-REV ou votre fiche d’évaluation cadastrale. Les surfaces se saisissent en m² réels : la pondération est automatique.')
 with st.container(border=True):
     st.markdown('#### 1 · Identifier votre local')
-    adresse=st.text_input('Adresse complète du bien',placeholder='Ex. 18 cours Gambetta, 69007 Lyon', help='Indiquez le numéro, la voie, le code postal et la commune du local imposé, et non votre adresse de correspondance. Pour Lyon, précisez l’arrondissement.')
+    mode_recherche = st.radio('Rechercher le bien par', ['Adresse', 'Parcelle cadastrale'], horizontal=True, key='express_mode')
+    reference = {}
+    adresse = ''
+    if mode_recherche == 'Adresse':
+        adresse=st.text_input('Adresse complète du bien',placeholder='Ex. 18 cours Gambetta, 69007 Lyon', help='Indiquez le numéro, la voie, le code postal et la commune du local imposé, et non votre adresse de correspondance. Pour Lyon, précisez l’arrondissement.')
+    else:
+        reference = saisir_reference('express_ref')
     categorie=st.selectbox('Catégorie du local', cat_codes,
         index=None, placeholder='Sélectionnez la catégorie figurant sur votre document',
         format_func=lambda code:f"{code} — {cat_map[code]['description']}",
@@ -241,7 +248,7 @@ with st.container(border=True):
             for i,(cle,libelle) in enumerate(TAXES.items()):
                 with cols_plan[i % 2]:
                     corrections_brutes[cle] = st.text_input(libelle+' · correction de base (€)', value='', key='plan_'+cle, placeholder='ex. -125,50', help='Montant signé de correction de base imposable pour cette taxe et cette année, justifié par votre fiche fiscale. Vide = inconnu ; 0 = correction nulle confirmée. Ce champ ne reçoit ni le montant de taxe payé ni un taux.')
-    signature=json.dumps([adresse,categorie,surfaces,annee,construction_nouvelle,annee_achevement,historique,corrections_brutes],sort_keys=True)
+    signature=json.dumps([mode_recherche,reference,adresse,categorie,surfaces,annee,construction_nouvelle,annee_achevement,historique,corrections_brutes],sort_keys=True)
     if st.session_state.get('_express_saisie') != signature:
         st.session_state.pop('_calcul_express',None)
         st.session_state.pop('_parcelles_attente',None)
@@ -252,7 +259,7 @@ with st.container(border=True):
 if run:
     st.session_state.pop('_parcelles_attente',None)
     st.session_state.pop('_calcul_express',None)
-    if len(adresse.strip())<6:
+    if mode_recherche == 'Adresse' and len(adresse.strip())<6:
         st.error('Indiquez une adresse complète pour localiser le bien.')
     elif categorie is None:
         st.error('Sélectionnez la catégorie fiscale figurant sur votre déclaration 6660-REV ou votre fiche cadastrale.')
@@ -266,26 +273,37 @@ if run:
             st.stop()
         with st.spinner('Recherche de la parcelle et des données fiscales…'):
             try:
-                options=adresses(adresse)
-                if not options:
-                    st.error('Adresse non trouvée : précisez le numéro, la voie et le code postal.')
-                else:
-                    cand=[]
-                    for opt in options[:3]:
-                        try:
-                            parcels=parcelles_a_l_adresse(opt)
-                        except Exception:
-                            parcels=[]
-                        if parcels:
-                            cand=[(opt,p) for p in parcels[:12]]
-                            break
-                    if not cand:
-                        st.error('Aucune parcelle identifiable à cette adresse. Essayez une adresse plus précise.')
-                    elif len(cand)==1 and cand[0][1].get('recherche')=='Point dans la parcelle':
-                        finaliser(cand[0],categorie,surfaces,annee,construction_nouvelle,annee_achevement,historique,corrections_validees)
+                if mode_recherche == 'Parcelle cadastrale':
+                    trouves = identifier_par_reference(reference)
+                    if not trouves:
+                        st.error('Aucune parcelle trouvée. Vérifiez le code INSEE cadastral, le préfixe, la section et le numéro.')
                     else:
-                        st.session_state['_parcelles_attente']={
-                            'candidats':cand,'categorie':categorie,'surfaces':surfaces,'annee':annee,'construction_nouvelle':construction_nouvelle,'annee_achevement':annee_achevement,'historique':historique,'corrections_planchonnement':corrections_validees}
+                        st.session_state['_parcelles_attente'] = {
+                            'candidats': [(opt,opt['parcelle']) for opt in trouves],
+                            'categorie':categorie,'surfaces':surfaces,'annee':annee,
+                            'construction_nouvelle':construction_nouvelle,'annee_achevement':annee_achevement,
+                            'historique':historique,'corrections_planchonnement':corrections_validees}
+                else:
+                    options=adresses(adresse)
+                    if not options:
+                        st.error('Adresse non trouvée : précisez le numéro, la voie et le code postal.')
+                    else:
+                        cand=[]
+                        for opt in options[:3]:
+                            try:
+                                parcels=parcelles_a_l_adresse(opt)
+                            except Exception:
+                                parcels=[]
+                            if parcels:
+                                cand=[(opt,p) for p in parcels[:12]]
+                                break
+                        if not cand:
+                            st.error('Aucune parcelle identifiable à cette adresse. Essayez une adresse plus précise.')
+                        elif len(cand)==1 and cand[0][1].get('recherche')=='Point dans la parcelle':
+                            finaliser(cand[0],categorie,surfaces,annee,construction_nouvelle,annee_achevement,historique,corrections_validees)
+                        else:
+                            st.session_state['_parcelles_attente']={
+                                'candidats':cand,'categorie':categorie,'surfaces':surfaces,'annee':annee,'construction_nouvelle':construction_nouvelle,'annee_achevement':annee_achevement,'historique':historique,'corrections_planchonnement':corrections_validees}
             except Exception as exc:
                 st.error('Recherche cadastrale momentanément indisponible : '+str(exc))
 
@@ -295,14 +313,15 @@ if pending:
     with st.container(border=True):
         if len(candidats)>1:
             st.markdown('**Confirmez la parcelle correspondant au local**')
-            selection=st.selectbox('Parcelle cadastrale',range(len(candidats)),
-                format_func=lambda i: f"{candidats[i][1]['section']} {candidats[i][1]['numero']} · {candidats[i][1]['insee']} · {candidats[i][1].get('distance_m','?')} m du point d’adresse",
+            selection=st.selectbox('Parcelle cadastrale',range(len(candidats)), index=None, placeholder='Sélectionnez la parcelle exacte',
+                format_func=lambda i: libelle_parcelle(candidats[i][1]),
                 help='Comparez la section et le numéro avec votre avis ou votre titre de propriété. La proximité du point d’adresse ne suffit pas à identifier juridiquement votre parcelle.')
         else:
             selection=0
             p=candidats[0][1]
-            st.caption(f"Parcelle identifiée : {p['section']} {p['numero']}")
-        if st.button('Obtenir le résultat',type='primary',use_container_width=True):
+            st.caption('Parcelle identifiée : '+libelle_parcelle(p))
+        st.caption('Confirmez la référence cadastrale. La parcelle ne détermine pas à elle seule le local, sa catégorie ou ses surfaces.')
+        if st.button('Obtenir le résultat',type='primary',use_container_width=True,disabled=selection is None):
             try:
                 finaliser(candidats[selection],pending['categorie'],pending['surfaces'],pending['annee'],pending.get('construction_nouvelle',False),pending.get('annee_achevement'),pending.get('historique','inconnu'),pending.get('corrections_planchonnement',{}))
                 st.rerun()

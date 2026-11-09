@@ -1,0 +1,79 @@
+"""Recherche cadastrale partagée, sans géocodage ni adresse obligatoire."""
+import re
+import streamlit as st
+from cadastre import rechercher_parcelle
+
+
+def saisir_reference(cle, valeurs=None):
+    valeurs = valeurs or {}
+    st.caption('Reprenez les références de votre avis, titre de propriété ou plan cadastral. Une parcelle peut contenir plusieurs locaux : le calcul portera sur le local que vous décrivez ensuite.')
+    commune = st.text_input('Commune de la parcelle', value=valeurs.get('commune', ''), key=cle+'_commune', help='Nom de la commune cadastrale. Pour Lyon, indiquez l’arrondissement si nécessaire.')
+    insee = st.text_input('Code INSEE cadastral de la commune', value=valeurs.get('insee', ''), key=cle+'_insee', help='Code à 5 caractères, différent du code postal. Exemple : 69387 pour Lyon 7e. Pour la Corse, le code peut commencer par 2A ou 2B.')
+    a, b, c = st.columns(3)
+    with a:
+        prefixe = st.text_input('Préfixe cadastral (facultatif)', value=valeurs.get('prefixe', ''), key=cle+'_prefixe', help='Trois chiffres, souvent 000. Laissez vide si inconnu : plusieurs parcelles pourront être proposées en cas d’anciennes communes.')
+    with b:
+        section = st.text_input('Section cadastrale', value=valeurs.get('section', ''), key=cle+'_section', help='Exemple : AC, 01, ou A qui sera recherché sous 0A. Ce n’est pas le numéro de lot de copropriété.')
+    with c:
+        numero = st.text_input('Numéro de parcelle', value=valeurs.get('numero', ''), key=cle+'_numero', help='Exemple : 123 ou 0123. Ne saisissez pas le numéro de lot, de porte ou le numéro fiscal du local.')
+    return dict(commune=commune, insee=insee, prefixe=prefixe, section=section, numero=numero)
+
+
+def normaliser_reference(reference):
+    r = {k: str(reference.get(k) or '').strip().upper() for k in ('commune', 'insee', 'prefixe', 'section', 'numero')}
+    if not r['commune']:
+        raise ValueError('Renseignez le nom de la commune de la parcelle.')
+    if not re.fullmatch(r'(?:\d{5}|2[AB]\d{3})', r['insee']):
+        raise ValueError('Le code INSEE cadastral doit comporter 5 caractères ; ne renseignez pas le code postal.')
+    if not re.fullmatch(r'[A-Z0-9]{1,2}', r['section']):
+        raise ValueError('Section cadastrale invalide : utilisez par exemple AC ou 0A.')
+    if not re.fullmatch(r'\d{1,4}', r['numero']) or int(r['numero']) == 0:
+        raise ValueError('Le numéro de parcelle doit être compris entre 1 et 9999.')
+    if r['prefixe'] and not re.fullmatch(r'\d{1,3}', r['prefixe']):
+        raise ValueError('Le préfixe cadastral doit comporter au plus trois chiffres, ou rester vide.')
+    r.update(section=r['section'].zfill(2), numero=r['numero'].zfill(4), prefixe=r['prefixe'].zfill(3) if r['prefixe'] else '')
+    return r
+
+
+def identifier_par_reference(reference):
+    r = normaliser_reference(reference)
+    rows = rechercher_parcelle(r['insee'], r['section'], r['numero'], r['prefixe'] or None)
+    resultats = []
+    vus = set()
+    for p in rows:
+        identifiant = str(p.get('idu') or p.get('id') or '')
+        code = str(p.get('code_insee') or '')
+        if not code and p.get('code_dep') is not None and p.get('code_com') is not None:
+            dep = str(p['code_dep']).zfill(2)
+            code = dep + str(p['code_com']).zfill(2 if len(dep) == 3 else 3)
+        if not code and len(identifiant) >= 14:
+            code = identifiant[:5]
+        pref = str(p.get('com_abs') if p.get('com_abs') is not None else p.get('prefixe') or '').strip()
+        if not pref and len(identifiant) >= 14:
+            pref = identifiant[5:8]
+        sec = str(p.get('section') or '').strip().upper().zfill(2)
+        num = str(p.get('numero') or '').strip().zfill(4)
+        pref = pref.zfill(3) if pref else ''
+        # Ne pas accepter une autre commune, section ou parcelle renvoyée par erreur.
+        if (code.upper(), sec, num) != (r['insee'], r['section'], r['numero']):
+            continue
+        if not re.fullmatch(r'\d{3}', pref) or (r['prefixe'] and pref != r['prefixe']):
+            continue
+        key = (code, pref, sec, num)
+        if key in vus:
+            continue
+        vus.add(key)
+        commune = str(p.get('nom_com') or p.get('nom_commune') or r['commune'])
+        parcelle = dict(insee=code, commune=commune, departement=code[:3] if code.startswith(('97','98')) else code[:2],
+                        prefixe=pref, section=sec, numero=num, id=identifiant,
+                        recherche='Référence cadastrale — confirmation obligatoire', distance_m=None)
+        resultats.append(dict(libelle=f'Parcelle {pref} {sec} {num} · {commune} ({code})',
+                              commune=commune, insee=code, code_postal='', parcelle=parcelle))
+    return resultats
+
+
+def libelle_parcelle(parcelle):
+    texte = f"Préfixe {parcelle.get('prefixe') or 'non précisé'} · {parcelle['section']} {parcelle['numero']} · {parcelle['insee']}"
+    if parcelle.get('distance_m') is not None:
+        texte += f" · {parcelle['distance_m']} m du point d’adresse"
+    return texte

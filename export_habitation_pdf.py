@@ -29,6 +29,9 @@ def generer_pdf_habitation(d):
             ('Surface pondérée principale',str(d['surfaces']['surface_ponderee'])+' m²'),
             ('Terrasse déclarée',str(d.get('terrasse_reelle',0))+' m²'),
             ('Dépendances déclarées',str(d.get('autres_dependances',0))+' m²')]
+    if d.get('parcelle'):
+        parcelle=d['parcelle']
+        fields.append(('Référence cadastrale', f"{parcelle['insee']} / {parcelle['prefixe']} / {parcelle['section']} / {parcelle['numero']}"))
     for k,v in fields:
         story.append(Paragraph(f'<b>{ph(k)} :</b> {ph(v)}',st['AxNormalH']))
         story.append(Spacer(1,3))
