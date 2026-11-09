@@ -75,7 +75,7 @@ class ParcoursGuidesUI(unittest.TestCase):
             champ(at.button, 'Vérifier mes informations').click().run()
             self.assertEqual(at.session_state['hab_etape'], 2)
             self.assertTrue(any('Choisissez une catégorie' in x.value for x in at.error))
-            self.assertIn('M’aider à choisir la catégorie la plus pertinente', [x.label for x in at.expander])
+            self.assertTrue(any('M’aider à choisir la catégorie la plus pertinente' in x.value for x in at.markdown))
             champ(at.selectbox, 'Catégorie cadastrale du logement').select('5')
             champ(at.button, 'Vérifier mes informations').click().run()
             self.assertEqual(at.session_state['hab_etape'], 3)
@@ -126,7 +126,8 @@ class ParcoursGuidesUI(unittest.TestCase):
                   'parametres': {'annexes': 0., 'terrasse': 0., 'entretien': 'Passable',
                                   'situation_generale': 'Ordinaire', 'situation_particuliere': 'Ordinaire'}}
         rows = [dict(insee='69387', nature='A', categorie='5', serie='A', origine='387', tarif_1970=10., annee_tarif=2024)]
-        r = calculer_scenarios(saisie, adr, {}, rows)
+        with patch('dossier_habitation.resoudre_tout', return_value={k: None for k in COMPOSANTES}):
+            r = calculer_scenarios(saisie, adr, {}, rows)
         at = AppTest.from_file(str(ROOT / 'parcours_habitation.py'))
         at.session_state['hab_etape'] = 3
         at.session_state['hab_saisie'] = saisie

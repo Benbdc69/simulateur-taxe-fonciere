@@ -158,7 +158,8 @@ elif etape == 2:
             index=categories.index(saisie.get('categorie')),
             format_func=libelle_categorie,
             help='Choix obligatoire pour calculer. Reprenez la fiche cadastrale ou choisissez une hypothèse avec l’aide au classement. La fourchette comparera uniquement les séries publiées dans cette catégorie.')
-        with st.expander('M’aider à choisir la catégorie la plus pertinente', expanded=True):
+        st.markdown('#### M’aider à choisir la catégorie la plus pertinente')
+        with st.container(border=True):
             st.markdown('**Les critères de classement à examiner ensemble**')
             for critere, explication in CRITERES:
                 st.markdown(f'**{critere}** — {explication}')
