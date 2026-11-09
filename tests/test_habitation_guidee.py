@@ -62,7 +62,8 @@ class HabitationGuideeTests(unittest.TestCase):
         self.saisie['parametres'] = {'annexes': 20., 'terrasse': 10.}
         x = self.calculer()['tarifs'][0]
         self.assertTrue(x['surfaces']['dependances_a_evaluer_separement'])
-        self.assertEqual(x['surfaces']['surface_ponderee'], 68)
+        self.assertEqual(x['surfaces']['surface_ponderee'], 72)
+        self.assertEqual(x['surfaces']['terrasse_ponderee'], 4)
         maison = surface_totale(45, 'M', '5', annexes=20, terrasse=10)
         self.assertEqual(maison['annexes_ponderees'], 8)
         self.assertEqual(maison['terrasse_ponderee'], 4)

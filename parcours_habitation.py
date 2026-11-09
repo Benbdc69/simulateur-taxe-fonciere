@@ -135,6 +135,8 @@ elif etape == 2:
         with a:
             terrasse = st.number_input('Terrasse accessible (m²)' if maison else 'Terrasses et toitures-terrasses accessibles (m²)', min_value=0., max_value=10000., value=float(params.get('terrasse', 0)), step=1.,
                 help='Surface réelle de la terrasse accessible. Laissez 0 s’il n’y en a pas. Ne l’ajoutez pas à la surface des pièces.')
+        coef_terrasse = st.number_input('Coefficient de pondération de la terrasse', min_value=.2, max_value=.6, value=float(params.get('coeff_terrasse', .4)), step=.05, help='Article 324 N : entre 0,2 et 0,6 selon le service rendu. Reprenez la fiche cadastrale. La valeur proposée 0,4 est une hypothèse, pas un coefficient déduit de l’adresse.')
+        st.caption('La terrasse du cadre 4 B est intégrée au logement après pondération. Surface réelle puis surface pondérée arrondies au m² inférieur. Le coefficient 0,4 proposé doit être confirmé ou adapté à la fiche cadastrale.')
         annexes = 0.
         with b:
             if maison:
@@ -183,8 +185,6 @@ elif etape == 2:
                 if maison:
                     coef_annexe = st.selectbox('Pondération des dépendances', [.2, .3, .4, .5, .6], index=[.2, .3, .4, .5, .6].index(params.get('coeff_annexes', .4)),
                         help='Coefficient cadastral de 0,2 à 0,6 selon le service rendu. Le choix 0,4 est une hypothèse, pas une valeur déduite de votre adresse. Reprenez la valeur de votre fiche si elle est connue.')
-                    coef_terrasse = st.selectbox('Pondération de la terrasse', [.2, .3, .4, .5, .6], index=[.2, .3, .4, .5, .6].index(params.get('coeff_terrasse', .4)),
-                        help='Coefficient de 0,2 à 0,6 à confirmer sur le dossier cadastral. Il s’applique uniquement à la terrasse et non aux pièces du logement.')
         st.markdown('#### Équipements du logement' if maison else '#### 42 · Confort du logement — H2')
         st.caption('Le calcul transforme les équipements en équivalences de surface. Vérifiez les quantités proposées : elles ne sont pas déduites automatiquement du nombre de pièces.')
         a, b = st.columns(2)
@@ -236,10 +236,10 @@ elif etape == 2:
     if retour or suivant:
         saisie['dependances'] = dependances_saisies
         saisie.update(surface=surface, categorie=categorie, categorie_confirmee=source_categorie == 'Catégorie figurant sur ma fiche cadastrale', parametres={
-            'annexes': annexes, 'terrasse': terrasse, 'entretien': entretien,
+            'annexes': annexes, 'terrasse': terrasse, 'coeff_terrasse':coef_terrasse, 'entretien': entretien,
             'situation_generale': sit_gen, 'situation_particuliere': sit_part,
             **quantites, **equipements,
-            **({'coeff_annexes': coef_annexe, 'coeff_terrasse': coef_terrasse} if maison else {'etage': etage, 'ascenseur': ascenseur})})
+            **({'coeff_annexes': coef_annexe} if maison else {'etage': etage, 'ascenseur': ascenseur})})
         if maison:
             saisie.pop('h2', None)
         else:
@@ -300,10 +300,10 @@ else:
                 st.error('Estimation indisponible : ' + str(exc))
 
     r = st.session_state.get('hab_resultat')
-    if r and (not saisie.get('categorie') or r.get('categorie') != saisie.get('categorie')):
+    if r and (not saisie.get('categorie') or r.get('categorie') != saisie.get('categorie') or any('detail_terrasse' not in t.get('surfaces', {}) for t in r.get('tarifs', []))):
         st.session_state.pop('hab_resultat', None)
         r = None
-        st.info('La catégorie doit être choisie et le résultat recalculé. Utilisez « Modifier mes informations » pour préciser le classement.')
+        st.info('Les paramètres de calcul ont changé. Vérifiez les informations puis relancez le calcul pour actualiser le résultat.')
     if r:
         st.divider()
         st.markdown("""<style>
@@ -340,8 +340,11 @@ else:
         if 'pieces_chauffage_scenario' in x:
             st.info(f"Chauffage pris en compte : {x['pieces_chauffage_scenario']} × 2 m² = +{2*x['pieces_chauffage_scenario']} m² d’équivalence de surface. Cette majoration s’ajoute à la surface nette avant application du tarif cadastral. Le nombre de pièces chauffées est celui que vous avez saisi, sans déduction automatique.")
         sp = x['surfaces']
+        if sp.get('terrasse_ponderee', 0) or r.get('terrasse_reelle', 0):
+            t = sp['detail_terrasse']
+            st.info(f"Terrasse intégrée : {t['surface_declaree']:g} m² déclarés → {t['surface_reelle_retenue']} m² réels retenus × {t['coefficient']:g} → {t['surface_ponderee']} m² pondérés après arrondi inférieur, ajoutés avant le correctif d’ensemble. Coefficient à confirmer sur la fiche cadastrale.")
         if sp['dependances_a_evaluer_separement']:
-            st.warning('Estimation partielle : terrasse et/ou dépendances d’appartement sont signalées mais non chiffrées. Les montants portent sur la partie principale uniquement.')
+            st.warning('Estimation partielle : des surfaces de dépendances anciennement regroupées ne sont pas ventilées. Précisez leur traitement dans le cadre 5 pour les chiffrer.')
         if not r['taux_complets']:
             missing = [LIBELLES[k] for k in COMPOSANTES if not r['taux'].get(k) or r['taux'][k].get('taux') is None]
             st.warning('Taux non documentés : ' + ', '.join(missing) + '. Aucun total de cotisations n’est affiché ; un taux manquant ne vaut pas zéro.')
@@ -405,6 +408,8 @@ else:
                 carte_habitation('Total estimé — logement et dépendances distinctes comprises', fmt(x['total_bien']), 'Hors frais et exonérations ; bases et taux distincts renseignés.', principale=True)
         with st.expander('Sources et millésimes utilisés'):
             st.write('Tarifs cadastraux DGFiP 2024 en valeur de référence 1970 : ' + SOURCE)
+            if r.get('terrasse_reelle', 0):
+                st.write('Pondération de la terrasse — DGFiP, brochure IDL 2025, p. 23 (articles 324 M/N) : '+sp['detail_terrasse']['source'])
             st.write(r['facteur']['source_departement'])
             st.write(r['facteur']['source_revalorisation'])
             st.table([{'Composante': LIBELLES[k], 'Taux (%)': v['taux'], 'Année source': v['annee_source'], 'Source': v.get('source', '')} for k, v in r['taux'].items() if v])

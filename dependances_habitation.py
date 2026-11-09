@@ -1,5 +1,6 @@
 """Dépendances H2 : rattachement explicite, surfaces et bases fiscales distinctes."""
 from math import floor, isfinite
+from decimal import Decimal, ROUND_FLOOR
 
 TYPES = {'piece': 'Pièce indépendante / chambre de service', 'garage': 'Garage, box ou parking privé',
          'cave': 'Grenier, cave ou autre rangement', 'agrement': 'Élément de pur agrément'}
@@ -14,6 +15,19 @@ def nombre(value, label, entier=False):
     if isinstance(value, bool) or not isfinite(n) or n < 0 or (entier and not n.is_integer()):
         raise ValueError(f'{label} : valeur positive ou nulle attendue' + (' et entière.' if entier else '.'))
     return int(n) if entier else n
+
+
+SOURCE_PONDERATION = 'https://www.impots.gouv.fr/www2/fichiers/documentation/brochure/idl/idl_2025.pdf'
+
+
+def ponderer_surface(surface, coefficient):
+    """Articles 324 M/N : surface réelle puis pondérée arrondies au m² inférieur."""
+    reelle = floor(nombre(surface, 'Surface'))
+    coeff = nombre(coefficient, 'Coefficient de pondération')
+    if not .2 <= coeff <= .6:
+        raise ValueError('Coefficient de pondération attendu entre 0,2 et 0,6.')
+    produit = Decimal(reelle) * Decimal(str(coeff))
+    return int(produit.to_integral_value(rounding=ROUND_FLOOR))
 
 
 def valider_dependances(lignes):
@@ -41,7 +55,7 @@ def valider_dependances(lignes):
         r['electricite'] = bool(r.get('electricite', False))
         r['base_tf'] = None if r.get('base_tf') is None else nombre(r['base_tf'], f'Dépendance {i}, base fiscale')
         r['taux_logement_confirmes'] = bool(r.get('taux_logement_confirmes', False))
-        r['surface_ponderee'] = floor(r['surface'] * r['coefficient']) if r['mode'] == 'incorporee' else 0
+        r['surface_ponderee'] = ponderer_surface(r['surface'], r['coefficient']) if r['mode'] == 'incorporee' else 0
         r['equivalence_confort'] = ((4 if r['eau'] else 0) + (2 if r['electricite'] else 0)
             + 3*r['wc'] + 5*r['baignoires'] + 4*r['douches'] + 3*r['lavabos'] + 2*r['pieces_chauffees']) if r['mode'] == 'incorporee' else 0
         resultat.append(r)

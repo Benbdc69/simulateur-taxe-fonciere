@@ -106,6 +106,9 @@ def generer_pdf_habitation(d):
             story.append(Paragraph(texte,st['AxNormalH']))
         if d.get('dependances_distinctes') and 'total_bien' in chosen:
             story.append(Paragraph('<b>Total estimé du bien, dépendances distinctes comprises : '+eur(chosen['total_bien'])+'</b> (hors frais et exonérations).',st['AxNormalH']))
+    if d.get('terrasse_reelle',0) and d['surfaces'].get('detail_terrasse'):
+        terrasse=d['surfaces']['detail_terrasse']
+        story.append(Paragraph('Terrasse intégrée au logement : '+ph(terrasse['surface_declaree'])+' m² déclarés ; '+ph(terrasse['surface_reelle_retenue'])+' m² réels retenus x '+ph(terrasse['coefficient'])+' = '+ph(terrasse['surface_ponderee'])+' m² pondérés après arrondi inférieur, avant correctif d’ensemble. Coefficient à confirmer sur la fiche cadastrale. Référence : articles 324 M/N, brochure DGFiP IDL 2025 p. 23.',st['AxNormalH']))
     story.append(Paragraph('Périmètre et réserves',st['AxHeadH']))
     notes=list(d.get('reserves_h2', []))
     if any('total' not in x for x in d.get('dependances_distinctes', [])):
@@ -120,7 +123,7 @@ def generer_pdf_habitation(d):
         notes.append('Catégorie cadastrale inconnue : ce rapport détaille un scénario exploratoire sélectionné, et ne confirme pas le classement du logement. D’autres catégories peuvent être disponibles dans le simulateur.')
     if len({(x['serie'],x.get('origine')) for x in d['tarifs']})>1:notes.append('Plusieurs séries de tarifs : la série exacte du local doit être confirmée dans la fiche cadastrale.')
     if d['surfaces'].get('dependances_a_evaluer_separement'):
-        notes.append('IMPORTANT : terrasse et/ou dépendances d’appartement peuvent faire l’objet d’une évaluation fiscale distincte ; leur valeur n’entre pas dans les montants ci-dessus.')
+        notes.append('Des surfaces de dépendances anciennement regroupées restent hors calcul : préciser leur rattachement ou leur évaluation distincte au cadre 5.')
     if not d.get('taux_complets'):notes.append('Une ou plusieurs composantes fiscales ne sont pas documentées. Aucun total complet n’est affiché.')
     anciens=[f"{k} ({v['annee_source']})" for k,v in rates.items() if v and int(v.get('annee_source',d['annee']))<d['annee']]
     if anciens:notes.append('Taux antérieurs repris à titre indicatif : '+', '.join(anciens)+'.')
@@ -149,7 +152,7 @@ def generer_pdf_habitation(d):
     if sp.get('nature')=='M':
         story.append(Paragraph('Dépendances rattachées (pondérées) : '+ph(sp.get('annexes_ponderees',0))+' m² ; terrasse (pondérée) : '+ph(sp.get('terrasse_ponderee',0))+' m².',st['AxNormalH']))
     else:
-        story.append(Paragraph('Terrasse déclarée : '+ph(d.get('terrasse_reelle',0))+' m² ; autres dépendances : '+ph(d.get('autres_dependances',0))+' m². Non incorporées dans la surface retenue de la partie principale si évaluées séparément.',st['AxNormalH']))
+        story.append(Paragraph('Terrasse déclarée : '+ph(d.get('terrasse_reelle',0))+' m² ; autres dépendances : '+ph(d.get('autres_dependances',0))+' m². Terrasse intégrée après pondération ; seules les dépendances évaluées distinctement restent hors de la surface du logement.',st['AxNormalH']))
     corr=sp.get('detail_correctifs') or {}
     if corr:
         story.append(Paragraph('Correctifs : entretien '+ph(corr.get('entretien'))+' (x '+ph(corr.get('coef_entretien'))+'), situation générale '+ph(corr.get('situation_generale'))+' ('+ph(corr.get('correctif_situation_generale'))+'), situation particulière '+ph(corr.get('situation_particuliere'))+' ('+ph(corr.get('correctif_situation_particuliere'))+'), étage/ascenseur ('+ph(corr.get('correctif_ascenseur'))+').',st['AxNormalH']))

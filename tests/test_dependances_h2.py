@@ -79,6 +79,22 @@ class DependancesCalculTests(unittest.TestCase):
         self.assertTrue(generer_pdf_habitation(d).startswith(b'%PDF'))
         self.assertEqual(r['autres_dependances'],30)
 
+    def test_terrasse_h2_12_m2_integree_avec_coefficient_renseigne(self):
+        for coefficient, attendu in [(.2,2),(.4,4),(.6,7)]:
+            with self.subTest(coefficient=coefficient):
+                self.saisie['parametres']={'terrasse':12.,'coeff_terrasse':coefficient}
+                r=self.calculer()
+                sp=r['tarifs'][0]['surfaces']
+                self.assertEqual(sp['terrasse_ponderee'],attendu)
+                self.assertEqual(sp['surface_ponderee'],68+attendu)
+                self.assertFalse(sp['dependances_a_evaluer_separement'])
+                self.assertEqual(sp['terrasse_separee_m2'],0)
+                self.assertTrue(generer_pdf_habitation({**r,'surfaces':sp,'serie_selectionnee':0}).startswith(b'%PDF'))
+
+    def test_arrondis_terrasse_reelle_puis_ponderee_et_precision_decimale(self):
+        self.assertEqual(surface_totale(45,'A','5',terrasse=12.9,coeff_terrasse=.4)['terrasse_ponderee'],4)
+        self.assertEqual(surface_totale(45,'A','5',terrasse=50.,coeff_terrasse=.58)['terrasse_ponderee'],29)
+
     def test_validation_choix_surface_et_quantites(self):
         for d in [dict(type='garage',surface=12),dict(type='garage',mode='incorporee',surface=0),
                   dict(type='garage',mode='incorporee',surface=12,coefficient=.9),
@@ -97,6 +113,21 @@ class DependancesCalculTests(unittest.TestCase):
 
 
 class DependancesUITests(unittest.TestCase):
+    def test_resultat_terrasse_12_m2_sans_message_exclusion(self):
+        with patch.dict(os.environ,{'TF_LOCAL_MODE':'1'}):
+            saisie=dict(nature='A',categorie='5',annee=2026,surface=45.,adresse={'libelle':'Bien test','insee':'42005'},
+                parametres={'terrasse':12.,'coeff_terrasse':.4,'annexes':0.,'entretien':'Passable',
+                            'situation_generale':'Ordinaire','situation_particuliere':'Ordinaire'})
+            r=calculer_scenarios(saisie,saisie['adresse'],{},[dict(insee='42005',nature='A',categorie='5',serie='A',origine='005',tarif_1970=10)])
+            at=AppTest.from_file(str(ROOT/'parcours_habitation.py'))
+            at.session_state['hab_etape']=3
+            at.session_state['hab_saisie']=saisie
+            at.session_state['hab_resultat']={**r,'incidents':[],'source_tarifs':'Fixture'}
+            at.run()
+            self.assertFalse(at.exception,[x.value for x in at.exception])
+            self.assertTrue(any('Terrasse intégrée : 12 m²' in x.value and '4 m² pondérés' in x.value for x in at.info))
+            self.assertFalse(any('Estimation partielle' in x.value for x in at.warning))
+
     def test_changement_annee_efface_base_distincte_et_confirmation(self):
         with patch.dict(os.environ,{'TF_LOCAL_MODE':'1'}):
             at=AppTest.from_file(str(ROOT/'parcours_habitation.py'))

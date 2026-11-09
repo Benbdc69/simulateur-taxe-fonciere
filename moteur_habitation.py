@@ -5,7 +5,7 @@ le tarif d'habitation du logement. Simulation indicative hors exonérations et f
 from __future__ import annotations
 from math import floor, isfinite
 import re
-from dependances_habitation import valider_dependances
+from dependances_habitation import valider_dependances, ponderer_surface, SOURCE_PONDERATION
 
 MAISON={1:(3.00,400),2:(2.50,320),3:(2.10,240),4:(1.70,160),5:(1.45,110),6:(1.30,80),7:(1.20,60),8:(1.10,40)}
 APPARTEMENT={1:(2.60,350),2:(2.20,260),3:(1.90,200),4:(1.60,140),5:(1.35,90),6:(1.25,70),7:(1.15,50),8:(1.05,30)}
@@ -78,8 +78,8 @@ def surface_totale(surface,nature,categorie,annexes=0,coeff_annexes=.4,
     }
     # Les annexes incorporées de maisons sont évaluées avec leur maison ;
     # les dépendances en copropriété peuvent constituer d'autres unités d'évaluation.
-    annexe_calc=floor(float(annexes)*float(coeff_annexes)) if nature=='M' else 0
-    terrasse_calc=floor(float(terrasse)*float(coeff_terrasse)) if nature=='M' else 0
+    annexe_calc=ponderer_surface(annexes, coeff_annexes) if nature=='M' else 0
+    terrasse_calc=ponderer_surface(terrasse, coeff_terrasse)
     asc=_ascenseur(etage,ascenseur) if nature=='A' else 0.
     correctif=ENTRETIEN[entretien]+SITUATION[situation_generale]+SITUATION[situation_particuliere]+asc
     nette=floor((comparaison+annexe_calc+terrasse_calc+dependances_ponderees)*correctif)
@@ -101,7 +101,9 @@ def surface_totale(surface,nature,categorie,annexes=0,coeff_annexes=.4,
     }
     if confort_dependances:
         confort['Équipements propres aux dépendances rattachées'] = confort_dependances
-    return {'detail_dependances':detail_dependances, 'dependances_ponderees':dependances_ponderees,
+    return {'detail_terrasse': {'surface_declaree':float(terrasse), 'surface_reelle_retenue':floor(float(terrasse)),
+                'coefficient':float(coeff_terrasse), 'surface_ponderee':terrasse_calc, 'source':SOURCE_PONDERATION},
+            'detail_dependances':detail_dependances, 'dependances_ponderees':dependances_ponderees,
             'detail_comparative':detail_comparative, 'detail_confort':confort,
             'detail_correctifs':{
                 'entretien':entretien,'coef_entretien':ENTRETIEN[entretien],
@@ -115,9 +117,9 @@ def surface_totale(surface,nature,categorie,annexes=0,coeff_annexes=.4,
             'comparative':comparaison,'annexes_ponderees':annexe_calc,'terrasse_ponderee':terrasse_calc,
             'correctif':round(correctif,4),'correctif_ascenseur':asc,
             'surface_nette':nette,'equivalence_confort':equip,'surface_ponderee':nette+equip,
-            'dependances_a_evaluer_separement':nature=='A' and (float(annexes)>0 or float(terrasse)>0),
+            'dependances_a_evaluer_separement':nature=='A' and float(annexes)>0,
             'annexes_separees_m2':float(annexes) if nature=='A' else 0.,
-            'terrasse_separee_m2':float(terrasse) if nature=='A' else 0.,
+            'terrasse_separee_m2':0.,
             'nature':nature,'categorie':_categ(categorie)}
 
 def simulations_tarifs(surface_ponderee,tarifs,coefficient_cumule=None,taux=None):

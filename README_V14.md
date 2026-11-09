@@ -190,3 +190,16 @@ total du bien explicitement identifié. Changer d’année efface la base annuel
 et la confirmation des taux. Le détail et les réserves figurent dans le PDF.
 Une dépendance sans base/taux connus reste signalée comme non chiffrée : le
 sous-total du logement ne vaut pas total du bien.
+
+### Terrasse du cadre 4 B H2
+
+La terrasse accessible est incorporée au calcul du logement, y compris pour
+un appartement. La pondération est visible et modifiable de 0,2 à 0,6 ; 0,4
+est proposé comme hypothèse à confirmer sur la fiche cadastrale, et non comme
+une valeur universelle. La surface réelle est arrondie au m² inférieur, puis
+la surface pondérée est arrondie au m² inférieur avant le correctif d’ensemble.
+Exemple : 12 m² × 0,4 → 4 m² pondérés retenus. Le calcul utilise Decimal pour
+éviter qu’un produit exact comme 50 × 0,58 = 29 soit arrondi à 28 à cause
+de la représentation binaire des nombres. Le détail apparaît à l’écran et au PDF.
+Référence vérifiée : brochure DGFiP IDL 2025, page 23, articles 324 M et 324 N.
+Les dépendances du cadre 5 conservent leur propre choix rattaché/distinct.
