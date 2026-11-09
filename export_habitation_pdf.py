@@ -1,5 +1,6 @@
 """Export PDF Axens - Habitation H1/H2 (ne modifie pas export_pdf professionnel)."""
 from io import BytesIO
+from dependances_habitation import MODES
 from xml.sax.saxutils import escape
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -71,7 +72,7 @@ def generer_pdf_habitation(d):
         for key,value in chosen['montants'].items():
             obj=rates.get(key) or {}
             detail.append([ph(LIBELLES.get(key,key)),eur(value),str(obj.get('annee_source','—'))])
-        detail.append(['TOTAL PARTIE PRINCIPALE',eur(chosen['total']),'*'])
+        detail.append(['TOTAL LOGEMENT ET RATTACHÉES',eur(chosen['total']),'*'])
         t=Table(detail,colWidths=[8.0*cm,4.5*cm,4.0*cm],repeatRows=1)
         t.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,0),PALE),('GRID',(0,0),(-1,-1),0.3,LINE),
                               ('FONTNAME',(0,-1),(-1,-1),'Helvetica-Bold'),('TEXTCOLOR',(0,-1),(-1,-1),BLUE),
@@ -84,8 +85,33 @@ def generer_pdf_habitation(d):
         label = 'cotisations hors frais et exonérations' if cle == 'total' else 'bases TFPB, cotisations indisponibles'
         valeurs = [x[cle] for x in comparables]
         story.append(Paragraph('Fourchette des séries de la catégorie '+ph(d['categorie'])+' : '+eur(min(valeurs))+' à '+eur(max(valeurs))+' ('+ph(label)+', pour le nombre de pièces chauffées déclaré).',st['AxNormalH']))
+    if d.get('dependances'):
+        story.append(Paragraph('Dépendances déclarées — cadre 5 H2',st['AxHeadH']))
+        for dependance in d['dependances']:
+            description = (ph(dependance['designation'])+' ; lot : '+ph(dependance.get('lot') or 'non précisé')
+                +' ; situation : '+ph(dependance.get('situation') or 'non précisée')
+                +' ; surface : '+ph(dependance['surface'])+' m² ; '+ph(MODES[dependance['mode']]))
+            if dependance['mode']=='incorporee':
+                description += (' ; pondération : '+ph(dependance['coefficient'])+' ; surface rattachée avant correctifs : '
+                    +ph(dependance['surface_ponderee'])+' m² ; équivalences de confort : '+ph(dependance['equivalence_confort'])+' m². Tarif du logement appliqué après le correctif d’ensemble.')
+            story.append(Paragraph(description,st['AxNormalH']))
+        for dependance in d.get('dependances_distinctes', []):
+            texte = ph(dependance['designation'])+' : '
+            if 'total' in dependance:
+                texte += 'base imposable distincte '+eur(dependance['base_tf'])+' ; cotisations '+eur(dependance['total'])+' ; mêmes taux que le logement confirmés pour la dépendance.'
+            else:
+                if dependance.get('base_tf') is not None:
+                    texte += 'base déclarée '+eur(dependance['base_tf'])+' ; '
+                texte += 'évaluation distincte non chiffrée : base de l’année et taux/zonage à documenter. Non incluse dans les montants du logement.'
+            story.append(Paragraph(texte,st['AxNormalH']))
+        if d.get('dependances_distinctes') and 'total_bien' in chosen:
+            story.append(Paragraph('<b>Total estimé du bien, dépendances distinctes comprises : '+eur(chosen['total_bien'])+'</b> (hors frais et exonérations).',st['AxNormalH']))
     story.append(Paragraph('Périmètre et réserves',st['AxHeadH']))
     notes=list(d.get('reserves_h2', []))
+    if any('total' not in x for x in d.get('dependances_distinctes', [])):
+        notes.append('Estimation partielle : les dépendances évaluées distinctement non chiffrées ne sont pas incluses. Le montant du logement n’est pas le total du bien.')
+    if any(x['mode']=='incorporee' for x in d.get('dependances', [])):
+        notes.append('Les dépendances rattachées sont pondérées avec les coefficients renseignés, avant le correctif d’ensemble du logement et le même tarif. Rattachement et pondération à confirmer sur la fiche cadastrale.')
     if 'pieces_chauffage_scenario' in chosen:
         notes.append(f"Chauffage : {chosen['pieces_chauffage_scenario']} pièces et annexes déclarées chauffées x 2 m² = +{2*chosen['pieces_chauffage_scenario']} m² d’équivalence, ajoutés à la surface nette avant application du tarif. Le nombre est saisi par l’utilisateur ; aucun comptage automatique n’est effectué.")
     if not d.get('categorie_confirmee'):
@@ -129,6 +155,8 @@ def generer_pdf_habitation(d):
         story.append(Paragraph('Correctifs : entretien '+ph(corr.get('entretien'))+' (x '+ph(corr.get('coef_entretien'))+'), situation générale '+ph(corr.get('situation_generale'))+' ('+ph(corr.get('correctif_situation_generale'))+'), situation particulière '+ph(corr.get('situation_particuliere'))+' ('+ph(corr.get('correctif_situation_particuliere'))+'), étage/ascenseur ('+ph(corr.get('correctif_ascenseur'))+').',st['AxNormalH']))
     if sp.get('nature') == 'A' and corr.get('niveau_local') is not None:
         story.append(Paragraph('Article 324 S : niveau retenu '+ph(corr['niveau_local'])+' (entresol compté pour un étage) ; ascenseur de l’immeuble desservant l’étage : '+('oui' if corr.get('ascenseur_immeuble') else 'non')+' ; correctif '+f"{float(sp['correctif_ascenseur']):+.2f}"+' ajouté au correctif d’ensemble. Ce correctif ne correspond pas à un ascenseur privatif intérieur ni à des m² d’équipement.',st['AxNormalH']))
+    if sp.get('dependances_ponderees'):
+        story.append(Paragraph('Dépendances rattachées détaillées : +'+ph(sp['dependances_ponderees'])+' m² pondérés avant correctif d’ensemble (sans double comptage dans les surfaces principales).',st['AxNormalH']))
     story.append(Paragraph('Coefficient global appliqué : <b>'+ph(sp.get('correctif','?'))+'</b> ; surface nette après application et arrondi : <b>'+ph(sp.get('surface_nette','?'))+' m²</b>.',st['AxNormalH']))
     eq=sp.get('detail_confort') or {}
     if eq:

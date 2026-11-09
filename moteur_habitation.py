@@ -5,6 +5,7 @@ le tarif d'habitation du logement. Simulation indicative hors exonérations et f
 from __future__ import annotations
 from math import floor, isfinite
 import re
+from dependances_habitation import valider_dependances
 
 MAISON={1:(3.00,400),2:(2.50,320),3:(2.10,240),4:(1.70,160),5:(1.45,110),6:(1.30,80),7:(1.20,60),8:(1.10,40)}
 APPARTEMENT={1:(2.60,350),2:(2.20,260),3:(1.90,200),4:(1.60,140),5:(1.35,90),6:(1.25,70),7:(1.15,50),8:(1.05,30)}
@@ -49,7 +50,7 @@ def surface_totale(surface,nature,categorie,annexes=0,coeff_annexes=.4,
                    entretien='Passable',situation_generale='Ordinaire',situation_particuliere='Ordinaire',
                    eau=True,gaz=False,electricite=True,baignoires=0,douches=1,lavabos=1,wc=1,
                    egout=True,vide_ordures=False,pieces_chauffees=0,terrasse=0,coeff_terrasse=.4,
-                   etage=0,ascenseur=False):
+                   etage=0,ascenseur=False,dependances=None):
     if entretien not in ENTRETIEN or situation_generale not in SITUATION or situation_particuliere not in SITUATION:
         raise ValueError('Correctif inconnu')
     if not .2<=float(coeff_annexes)<=.6 or not .2<=float(coeff_terrasse)<=.6:
@@ -58,6 +59,9 @@ def surface_totale(surface,nature,categorie,annexes=0,coeff_annexes=.4,
         if not isfinite(float(x)) or float(x)<0:raise ValueError('Quantité négative ou invalide')
     for x in (baignoires,douches,lavabos,wc,pieces_chauffees):
         if not float(x).is_integer():raise ValueError('Les nombres d’équipements et de pièces doivent être entiers')
+    detail_dependances = valider_dependances(dependances)
+    dependances_ponderees = sum(r['surface_ponderee'] for r in detail_dependances)
+    confort_dependances = sum(r['equivalence_confort'] for r in detail_dependances)
     comparaison=surface_comparative(surface,nature,categorie)
     # Décomposition traçable du barème. Ces champs n'affectent pas le calcul.
     importance, seuil = _config(nature, categorie)
@@ -78,10 +82,11 @@ def surface_totale(surface,nature,categorie,annexes=0,coeff_annexes=.4,
     terrasse_calc=floor(float(terrasse)*float(coeff_terrasse)) if nature=='M' else 0
     asc=_ascenseur(etage,ascenseur) if nature=='A' else 0.
     correctif=ENTRETIEN[entretien]+SITUATION[situation_generale]+SITUATION[situation_particuliere]+asc
-    nette=floor((comparaison+annexe_calc+terrasse_calc)*correctif)
+    nette=floor((comparaison+annexe_calc+terrasse_calc+dependances_ponderees)*correctif)
     equip=(4 if eau else 0)+(2 if gaz else 0)+(2 if electricite else 0)
     equip+=5*int(baignoires)+4*int(douches)+3*int(lavabos)+3*int(wc)
     equip+=(3 if egout else 0)+(3 if vide_ordures else 0)+2*int(pieces_chauffees)
+    equip += confort_dependances
     confort = {
         'Eau courante': 4 if eau else 0,
         'Gaz (installation fixe)': 2 if gaz else 0,
@@ -94,7 +99,10 @@ def surface_totale(surface,nature,categorie,annexes=0,coeff_annexes=.4,
         'Vide-ordures': 3 if vide_ordures else 0,
         'Pièces chauffées admissibles': 2 * int(pieces_chauffees),
     }
-    return {'detail_comparative':detail_comparative, 'detail_confort':confort,
+    if confort_dependances:
+        confort['Équipements propres aux dépendances rattachées'] = confort_dependances
+    return {'detail_dependances':detail_dependances, 'dependances_ponderees':dependances_ponderees,
+            'detail_comparative':detail_comparative, 'detail_confort':confort,
             'detail_correctifs':{
                 'entretien':entretien,'coef_entretien':ENTRETIEN[entretien],
                 'situation_generale':situation_generale,'correctif_situation_generale':SITUATION[situation_generale],

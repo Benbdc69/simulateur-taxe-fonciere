@@ -56,7 +56,7 @@ nécessaires avant publication générale.
 Le cadre 41 recueille les nombres de pièces par type, la surface totale affectée
 à l’habitation, les terrasses et l’existence d’une partie professionnelle. Le
 cadre 42 recueille les équipements, dont une case chauffage, l’ascenseur et
-l’escalier de service. La rubrique sanitaire regroupe les lavabos et les éviers.
+l’escalier de service. La rubrique sanitaire compte uniquement les lavabos ; les éviers sont exclus.
 Les correctifs et le classement réservés à l’administration sont regroupés
 dans un volet facultatif.
 
@@ -167,3 +167,26 @@ permettre les suggestions. « Nouveau calcul » réinitialise aussi le composant
 Validation : tests des seuils, de la sélection, du repli manuel et de
 l’invalidation des coordonnées ; vérification réelle sous Chromium de la frappe,
 des propositions IGN, de la sélection et de la remise à zéro dans les deux parcours.
+
+### Dépendances H2 : saisie ligne par ligne
+
+Le bouton « ＋ Ajouter une dépendance » crée une ligne du cadre 5 : type,
+désignation, lot, situation dans la propriété, surface et confort propre. Chaque
+ligne possède un choix obligatoire : rattachée au logement (même tarif) ou
+évaluation distincte. Des lignes peuvent être ajoutées/supprimées sans perdre
+les autres saisies ; « Nouveau calcul » efface aussi ces lignes.
+
+Pour une dépendance rattachée, sa surface est pondérée par le coefficient
+renseigné (0,4 proposé comme hypothèse à confirmer), ajoutée avant le correctif
+d’ensemble du logement et chiffrée au tarif sélectionné. Seuls les équipements
+propres non déjà comptés doivent être déclarés. Ne pas reporter sa surface dans
+la surface principale.
+
+Une évaluation distincte ne reçoit pas le tarif du logement. Elle reste hors
+du chiffrage tant que sa base imposable annuelle n’est pas documentée et que
+l’applicabilité des mêmes taux et du même zonage TEOM n’est pas confirmée.
+Le cas échéant, ses cotisations sont calculées séparément puis ajoutées à un
+total du bien explicitement identifié. Changer d’année efface la base annuelle
+et la confirmation des taux. Le détail et les réserves figurent dans le PDF.
+Une dépendance sans base/taux connus reste signalée comme non chiffrée : le
+sous-total du logement ne vaut pas total du bien.

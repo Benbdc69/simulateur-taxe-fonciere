@@ -6,6 +6,8 @@ from html import escape
 from classement_habitation import CLASSEMENT, CRITERES, libelle_categorie
 from pathlib import Path
 import streamlit as st
+from saisie_dependances import saisir_dependances
+from dependances_habitation import valider_dependances, TYPES, MODES
 from saisie_adresse import saisir_adresse
 from session_calcul import bouton_nouveau_calcul, cle_calcul
 from cadastre import adresses
@@ -109,7 +111,7 @@ elif etape == 2:
     params = saisie.get('parametres', {})
     maison = saisie['nature'] == 'M'
     h2 = saisie.get('h2', {})
-    with st.form(cle_calcul('hab_description')):
+    with st.container(border=True):
         pieces_h2 = {}
         if not maison:
             st.markdown('#### 41 · Consistance du logement — H2')
@@ -133,11 +135,13 @@ elif etape == 2:
         with a:
             terrasse = st.number_input('Terrasse accessible (m²)' if maison else 'Terrasses et toitures-terrasses accessibles (m²)', min_value=0., max_value=10000., value=float(params.get('terrasse', 0)), step=1.,
                 help='Surface réelle de la terrasse accessible. Laissez 0 s’il n’y en a pas. Ne l’ajoutez pas à la surface des pièces.')
+        annexes = 0.
         with b:
-            annexes = st.number_input('Garage, cave, grenier et autres dépendances (m²)', min_value=0., max_value=10000., value=float(params.get('annexes', 0)), step=1.,
+            if maison:
+                annexes = st.number_input('Garage, cave, grenier et autres dépendances (m²)', min_value=0., max_value=10000., value=float(params.get('annexes', 0)), step=1.,
                 help='Uniquement les surfaces qui ne sont pas déjà comptées dans le logement. Pour un appartement, ces dépendances peuvent être des unités fiscales séparées et ne sont pas chiffrées avec le tarif du logement.')
         if not maison:
-            st.info('Pour un appartement, les terrasses et dépendances renseignées seront signalées à part, sans les incorporer automatiquement au calcul de la partie principale.')
+            st.info('Détaillez les dépendances au cadre 5 ci-dessous. Pour chaque élément, choisissez s’il est rattaché au logement ou évalué distinctement.')
         partie_professionnelle = False
         declaration_6660 = False
         if not maison:
@@ -187,7 +191,7 @@ elif etape == 2:
         quantites = {}
         for i, (cle, libelle, valeur, aide) in enumerate([
             ('wc', 'WC privatifs', 0, 'Nombre de WC privatifs dans le logement. Ne comptez pas les sanitaires communs de l’immeuble.'),
-            ('lavabos', 'Lavabos et éviers' if not maison else 'Lavabos', 0, 'Nombre de lavabos et éviers, y compris les éviers de cuisine : le H2 les regroupe dans la même rubrique.'),
+            ('lavabos', 'Lavabos', 0, 'Nombre de lavabos uniquement. Les éviers de cuisine sont exclus du calcul.'),
             ('douches', 'Douches', 0, 'Nombre de douches. Ne comptez pas une baignoire équipée d’un flexible comme un second appareil distinct.'),
             ('baignoires', 'Baignoires', 0, 'Nombre de baignoires. Évitez de compter deux fois un même équipement dans la rubrique douches.'),
             ('pieces_chauffees', 'Pièces avec chauffage admissible', 0, 'Nombre de pièces disposant d’un chauffage fixe assimilable au chauffage central pour l’évaluation cadastrale. Ne comptez pas les couloirs ou WC ; des radiateurs mobiles seuls ne suffisent pas.'),
@@ -195,7 +199,7 @@ elif etape == 2:
             ('wc', 'WC particuliers', 0, 'Nombre de WC privatifs du logement.'),
             ('baignoires', 'Baignoires', 0, 'Nombre de baignoires ; ne comptez pas un même appareil dans deux rubriques.'),
             ('douches', 'Receveurs de douches', 0, 'Nombre de receveurs de douche distincts. Le flexible d’une baignoire ne constitue pas un receveur supplémentaire.'),
-            ('lavabos', 'Lavabos et éviers', 0, 'Nombre de lavabos et d’éviers, éviers de cuisine inclus, comme sur le H2.'),
+            ('lavabos', 'Lavabos', 0, 'Comptez uniquement les lavabos. Les éviers de cuisine ne doivent pas être inclus dans le calcul.'),
         ]):
             with [a, b][i % 2]:
                 quantites[cle] = st.number_input(libelle, min_value=0, max_value=100, value=int(params.get(cle, valeur)), help=aide)
@@ -222,10 +226,15 @@ elif etape == 2:
             st.caption('Correctif ajouté au correctif d’ensemble : avec ascenseur, 0 au RDC et au 1er niveau, +0,05 à partir du 2e ; sans ascenseur, 0 jusqu’au 3e, −0,05 au 4e, −0,10 au 5e, −0,15 à partir du 6e. Ce correctif n’est pas une équivalence de surface en m².')
             escalier_service = st.checkbox('Escalier de service', value=h2.get('escalier_service', False), help='Case 9 du cadre 42. Cette information est conservée dans le dossier ; aucun coefficient supplémentaire n’est inventé.')
             st.caption('La majoration sera de 2 m² × le nombre de pièces chauffées que vous saisissez. Aucun comptage automatique n’est effectué.')
+        anciennes_dependances = saisie.get('dependances')
+        if anciennes_dependances is None and not maison and params.get('annexes', 0):
+            anciennes_dependances = [{'type':'garage', 'designation':'Dépendances antérieurement regroupées', 'surface':params['annexes'], 'mode':None}]
+        dependances_saisies = saisir_dependances(anciennes_dependances, saisie['annee']) if not maison else []
         a, b = st.columns(2)
-        retour = a.form_submit_button('Retour au logement')
-        suivant = b.form_submit_button('Vérifier mes informations', type='primary')
+        retour = a.button('Retour au logement')
+        suivant = b.button('Vérifier mes informations', type='primary')
     if retour or suivant:
+        saisie['dependances'] = dependances_saisies
         saisie.update(surface=surface, categorie=categorie, categorie_confirmee=source_categorie == 'Catégorie figurant sur ma fiche cadastrale', parametres={
             'annexes': annexes, 'terrasse': terrasse, 'entretien': entretien,
             'situation_generale': sit_gen, 'situation_particuliere': sit_part,
@@ -246,17 +255,24 @@ elif etape == 2:
         elif not maison and not sum(pieces_h2.values()):
             st.error('Renseignez au moins une pièce dans le cadre 41 du H2.')
         else:
-            aller(3)
+            try:
+                valider_dependances(dependances_saisies)
+            except ValueError as exc:
+                st.error(str(exc))
+            else:
+                aller(3)
 
 else:
     st.subheader('3 · Vérifier avant de calculer')
     adr = saisie['adresse']
     params = saisie['parametres']
     st.write(f"**{adr['libelle']}** · {'Maison H1' if saisie['nature'] == 'M' else 'Appartement H2'} · imposition {saisie['annee']}")
-    st.write(f"Surface réelle : **{saisie['surface']:g} m²** · Terrasse : **{params['terrasse']:g} m²** · Dépendances : **{params['annexes']:g} m²**")
+    st.write(f"Surface réelle : **{saisie['surface']:g} m²** · Terrasse : **{params['terrasse']:g} m²** · Dépendances : **{params['annexes'] + sum(d['surface'] for d in saisie.get('dependances', [])):g} m²**")
     if saisie.get('h2'):
         st.table([{'Consistance H2': H2_PIECES[k], 'Nombre': v} for k,v in saisie['h2']['pieces'].items()])
         st.write('Pièces chauffées déclarées : ' + str(saisie['h2'].get('pieces_chauffees', 0)) + ' · Chauffage : ' + ('oui' if saisie['h2']['chauffage'] else 'non') + ' · Escalier de service : ' + ('oui' if saisie['h2']['escalier_service'] else 'non'))
+    if saisie.get('dependances'):
+        st.table([{'Dépendance': d.get('designation') or TYPES[d['type']], 'Surface (m²)': d['surface'], 'Traitement': MODES[d['mode']]} for d in saisie['dependances']])
     st.write('Catégorie : **' + (libelle_categorie(saisie['categorie']) if saisie.get('categorie') else 'à choisir avant le calcul') + '**')
     with st.expander('Relire les correctifs et les équipements retenus'):
         st.write(f"Entretien : {params['entretien']} · Situation générale : {params['situation_generale']} · Situation particulière : {params['situation_particuliere']}")
@@ -313,7 +329,7 @@ else:
             st.info(f"Plusieurs séries tarifaires sont publiées dans la catégorie {r['categorie']}. La série exacte et son origine sont à confirmer sur votre fiche cadastrale.")
             totals = [t['total'] for t in scenarios if 'total' in t]
             if totals:
-                st.write(f"**Fourchette des séries — catégorie {r['categorie']} : {fmt(min(totals))} à {fmt(max(totals))}**, pour le nombre de pièces chauffées déclaré, hors frais, exonérations et dépendances distinctes.")
+                st.write(f"**Fourchette des séries — catégorie {r['categorie']} : {fmt(min(totals))} à {fmt(max(totals))}**, pour le nombre de pièces chauffées déclaré et le logement avec ses dépendances rattachées, hors frais, exonérations et dépendances distinctes.")
             else:
                 bases = [t['base_tf'] for t in scenarios]
                 st.write(f"**Fourchette des bases TFPB — catégorie {r['categorie']} : {fmt(min(bases))} à {fmt(max(bases))}**. Les cotisations restent indisponibles faute de taux documentés.")
@@ -338,7 +354,7 @@ else:
             st.caption(f"Ascenseur de l’immeuble : {'oui' if sp['detail_correctifs']['ascenseur_immeuble'] else 'non'} · Niveau retenu : {sp['detail_correctifs']['niveau_local']} · Correctif article 324 S : {sp['correctif_ascenseur']:+.2f}, ajouté au correctif d’ensemble avant calcul de la surface nette.")
         if 'montants' in x:
             carte_habitation(
-                'Cotisations annuelles estimées — périmètre calculé', fmt(x['total']),
+                'Cotisations annuelles estimées — logement et dépendances rattachées', fmt(x['total']),
                 'Hors frais de gestion et exonérations. Sous réserve du classement cadastral, des taux et du zonage TEOM. Dépendances distinctes non incluses.',
                 principale=True,
             )
@@ -371,11 +387,22 @@ else:
                     )
         with st.expander('Comprendre le calcul, étape par étape', expanded=False):
             st.write(f"1. Surface comparative : **{sp['comparative']} m²**, issue du barème de catégorie {x['categorie']}.")
-            st.write(f"2. Ajout des dépendances pondérées retenues : **{sp['annexes_ponderees'] + sp['terrasse_ponderee']} m²** ; correctif global **× {sp['correctif']}** → surface nette **{sp['surface_nette']} m²**.")
+            st.write(f"2. Ajout des dépendances pondérées retenues : **{sp['annexes_ponderees'] + sp['terrasse_ponderee'] + sp.get('dependances_ponderees', 0)} m²** ; correctif global **× {sp['correctif']}** → surface nette **{sp['surface_nette']} m²**.")
             st.write(f"3. Équipements : **+ {sp['equivalence_confort']} m²** → surface pondérée **{sp['surface_ponderee']} m²**.")
             st.table([{'Équipement': k, 'Équivalence (m²)': v} for k, v in sp['detail_confort'].items() if v])
             st.write(f"4. Valeur locative 1970 : {sp['surface_ponderee']} m² × {fmt(x['tarif_1970'])}/m² = **{fmt(x['vl_1970'])}**.")
             st.write(f"5. Actualisation 1980 × {r['facteur']['actualisation_1980']} ; revalorisation nationale × {r['facteur']['revalorisation_nationale']} → **{fmt(x['vl_annee'])}**. La moitié forme la base TFPB : **{fmt(x['base_tf'])}**.")
+        if r.get('dependances'):
+            st.markdown('#### Dépendances déclarées')
+            st.table([{'Élément': d['designation'], 'Surface (m²)': d['surface'], 'Traitement': MODES[d['mode']],
+                'Surface pondérée rattachée (m²)': f"{d['surface_ponderee']:g} m²" if d['mode']=='incorporee' else 'Évaluation distincte'} for d in r['dependances']])
+            for d in r.get('dependances_distinctes', []):
+                if 'total' in d:
+                    st.write(f"**{d['designation']}** · Base distincte {fmt(d['base_tf'])} · Cotisations : **{fmt(d['total'])}**, avec les taux du logement confirmés pour cette dépendance.")
+                else:
+                    st.warning(f"{d['designation']} : évaluation distincte non chiffrée. Il faut une base de l’année simulée et des taux/zonage confirmés. Le montant du logement ne constitue pas le total du bien.")
+            if r.get('dependances_distinctes') and 'total_bien' in x:
+                carte_habitation('Total estimé — logement et dépendances distinctes comprises', fmt(x['total_bien']), 'Hors frais et exonérations ; bases et taux distincts renseignés.', principale=True)
         with st.expander('Sources et millésimes utilisés'):
             st.write('Tarifs cadastraux DGFiP 2024 en valeur de référence 1970 : ' + SOURCE)
             st.write(r['facteur']['source_departement'])

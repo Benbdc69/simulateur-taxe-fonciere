@@ -4,6 +4,7 @@ from facteurs_habitation import facteur_departement_annee
 from historique_taux import COMPOSANTES, resoudre_tout
 from tarifs_habitation import rechercher_tarifs
 from math import isfinite
+from dependances_habitation import valider_dependances, evaluer_distinctes
 
 H2_PIECES = {
     'reception': 'Salles à manger et pièces de réception',
@@ -67,6 +68,12 @@ def calculer_scenarios(saisie, adresse, referentiel, tarifs):
             reserves.append('Local mixte : seule la surface affectée à l’habitation est simulée. La partie professionnelle et sa déclaration 6660-REV doivent être traitées séparément.')
         if h2.get('escalier_service'):
             reserves.append('Escalier de service déclaré : information conservée, sans correctif supplémentaire automatique.')
+    dependances = valider_dependances(saisie.get('dependances', []))
+    for d in dependances:
+        if d['mode'] == 'distincte' and d['base_tf'] is not None and d.get('annee_base') != annee:
+            raise ValueError('La base de la dépendance doit être documentée pour l’année simulée.')
+    distinctes = evaluer_distinctes(dependances, taux, complet)
+    dependances_completes = all('total' in d for d in distinctes)
     scenarios = []
     for cat in categories:
         rows = rechercher_tarifs(code, saisie['nature'], cat, rows=tarifs)
@@ -77,8 +84,10 @@ def calculer_scenarios(saisie, adresse, referentiel, tarifs):
             if nombre is not None:
                 # Une ancienne saisie manuelle ne doit pas survivre au passage au H2.
                 params['pieces_chauffees'] = nombre
-            sp = surface_totale(saisie['surface'], saisie['nature'], cat, **params)
+            sp = surface_totale(saisie['surface'], saisie['nature'], cat, dependances=dependances, **params)
             for scenario in simulations_tarifs(sp['surface_ponderee'], rows, facteur['coefficient_cumule'], taux if complet else None):
+                if dependances_completes and 'total' in scenario:
+                    scenario['total_bien'] = round(scenario['total'] + sum(d['total'] for d in distinctes), 2)
                 scenarios.append({**scenario, 'categorie': cat, 'surfaces': sp,
                                   **({'pieces_chauffage_scenario': nombre} if h2 and h2.get('chauffage') else {})})
     if not scenarios:
@@ -90,6 +99,8 @@ def calculer_scenarios(saisie, adresse, referentiel, tarifs):
             'categorie_confirmee': bool(saisie.get('categorie_confirmee')), 'facteur': facteur,
             'surface_reelle': saisie['surface'],
             'terrasse_reelle': saisie['parametres'].get('terrasse', 0),
-            'autres_dependances': saisie['parametres'].get('annexes', 0),
+            'autres_dependances': saisie['parametres'].get('annexes', 0) + sum(d['surface'] for d in dependances),
+            'dependances': dependances, 'dependances_distinctes': distinctes,
+            'dependances_completes': dependances_completes,
             'tarifs': scenarios, 'taux': rates, 'taux_complets': complet,
             'h2': h2, 'reserves_h2': reserves}
