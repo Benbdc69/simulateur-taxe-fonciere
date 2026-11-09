@@ -152,3 +152,18 @@ future n’est extrapolée si elle manque. Le schéma extensible
 permet d’ajouter des millésimes après 2026 sans changer les fonctions de calcul.
 La récupération automatique d’un nouveau coefficient de revalorisation n’est
 pas implémentée : son intégration documentée au référentiel reste nécessaire.
+
+### Suggestions d’adresses pendant la frappe
+
+Les deux parcours utilisent streamlit-searchbox : à partir de cinq caractères,
+une pause de 450 ms déclenche la recherche IGN existante. L’utilisateur choisit
+une proposition ; son libellé, son code INSEE et ses coordonnées sont conservés
+pour la recherche de parcelle, sans géocodage supplémentaire. Une nouvelle
+frappe invalide le choix précédent. La saisie manuelle reste accessible, avec
+le bouton de recherche existant, notamment en cas d’indisponibilité des suggestions.
+Le premier écran habitation utilise des champs réactifs hors formulaire pour
+permettre les suggestions. « Nouveau calcul » réinitialise aussi le composant.
+
+Validation : tests des seuils, de la sélection, du repli manuel et de
+l’invalidation des coordonnées ; vérification réelle sous Chromium de la frappe,
+des propositions IGN, de la sélection et de la remise à zéro dans les deux parcours.

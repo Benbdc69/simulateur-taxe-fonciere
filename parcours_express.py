@@ -8,6 +8,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 import streamlit as st
+from saisie_adresse import saisir_adresse
 from session_calcul import bouton_nouveau_calcul, cle_calcul
 from cadastre import adresses, parcelles_a_l_adresse
 from recherche_bien import saisir_reference, identifier_par_reference, libelle_parcelle, saisir_commune
@@ -192,8 +193,9 @@ with st.container(border=True):
     mode_recherche = st.radio('Rechercher le bien par', ['Adresse', 'Parcelle cadastrale'], horizontal=True, key=cle_calcul('express_mode'))
     reference = {}
     adresse = ''
+    adresse_selectionnee = None
     if mode_recherche == 'Adresse':
-        adresse=st.text_input('Adresse complète du bien',key=cle_calcul('express_adresse'),placeholder='Numéro, voie, code postal et commune', help='Indiquez le numéro, la voie, le code postal et la commune du local imposé, et non votre adresse de correspondance. Pour Lyon, précisez l’arrondissement.')
+        adresse, adresse_selectionnee = saisir_adresse('Adresse complète du bien', cle_calcul('express_adresse'))
     else:
         automatique, selection_commune = saisir_commune(cle_calcul('express_ref'))
         reference = saisir_reference(cle_calcul('express_ref'), automatique=automatique, selection=selection_commune)
@@ -251,7 +253,7 @@ with st.container(border=True):
             for i,(cle,libelle) in enumerate(TAXES.items()):
                 with cols_plan[i % 2]:
                     corrections_brutes[cle] = st.text_input(libelle+' · correction de base (€)', value='', key=cle_calcul('plan_'+cle), placeholder='ex. -125,50', help='Montant signé de correction de base imposable pour cette taxe et cette année, justifié par votre fiche fiscale. Vide = inconnu ; 0 = correction nulle confirmée. Ce champ ne reçoit ni le montant de taxe payé ni un taux.')
-    signature=json.dumps([mode_recherche,reference,adresse,categorie,surfaces,annee,construction_nouvelle,annee_achevement,historique,corrections_brutes],sort_keys=True)
+    signature=json.dumps([mode_recherche,reference,adresse,adresse_selectionnee,categorie,surfaces,annee,construction_nouvelle,annee_achevement,historique,corrections_brutes],sort_keys=True)
     if st.session_state.get('_express_saisie') != signature:
         st.session_state.pop('_calcul_express',None)
         st.session_state.pop('_parcelles_attente',None)
@@ -287,7 +289,7 @@ if run:
                             'construction_nouvelle':construction_nouvelle,'annee_achevement':annee_achevement,
                             'historique':historique,'corrections_planchonnement':corrections_validees}
                 else:
-                    options=adresses(adresse)
+                    options=[adresse_selectionnee] if adresse_selectionnee is not None else adresses(adresse)
                     if not options:
                         st.error('Adresse non trouvée : précisez le numéro, la voie et le code postal.')
                     else:

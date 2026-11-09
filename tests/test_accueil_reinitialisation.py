@@ -48,12 +48,14 @@ class AccueilEtSaisieTests(unittest.TestCase):
         at.session_state['hab_saisie'] = {'surface': 80}
         at.session_state['express_ref_communes'] = [{'commune':'Ancienne recherche'}]
         at.run()
+        champ(at.radio, 'Saisie de l’adresse').set_value('Saisie manuelle').run()
         champ(at.text_input, 'Adresse complète du bien').input('Adresse saisie')
         champ(at.selectbox, 'Catégorie du local').select('BUR2')
         champ(at.number_input, 'P1 · Principale').set_value(100.)
         champ(at.checkbox, 'Construction nouvelle, reconstruction ou addition de construction (hors habitation)').check().run()
         champ(at.button, 'Nouveau calcul').click().run()
         self.assertFalse(at.exception)
+        champ(at.radio, 'Saisie de l’adresse').set_value('Saisie manuelle').run()
         self.assertEqual(champ(at.text_input, 'Adresse complète du bien').value, '')
         self.assertEqual(champ(at.number_input, 'P1 · Principale').value, 0.)
         self.assertIsNone(champ(at.selectbox, 'Catégorie du local').value)
@@ -73,6 +75,7 @@ class AccueilEtSaisieTests(unittest.TestCase):
                 self.assertFalse(any(x.value for x in at.checkbox))
                 champ(at.button, 'Nouveau calcul').click().run()
                 self.assertFalse(at.exception)
+                champ(at.radio, 'Saisie de l’adresse').set_value('Saisie manuelle').run()
                 self.assertEqual(champ(at.text_input, 'Adresse du bien').value, '')
                 self.assertNotIn('hab_resultat', at.session_state)
                 self.assertEqual(at.session_state['hab_saisie'], {})
@@ -81,6 +84,7 @@ class AccueilEtSaisieTests(unittest.TestCase):
         with patch('cadastre.adresses', return_value=[dict(libelle='Adresse test', insee='42005', commune='Andrézieux-Bouthéon')]):
             at = AppTest.from_file(str(ROOT/'parcours_habitation.py')).run()
             champ(at.number_input, 'Année d’imposition').set_value(2027)
+            champ(at.radio, 'Saisie de l’adresse').set_value('Saisie manuelle').run()
             champ(at.text_input, 'Adresse du bien').input('Adresse test')
             champ(at.button, 'Rechercher cette adresse').click().run()
             self.assertFalse(at.exception)

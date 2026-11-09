@@ -6,6 +6,7 @@ from html import escape
 from classement_habitation import CLASSEMENT, CRITERES, libelle_categorie
 from pathlib import Path
 import streamlit as st
+from saisie_adresse import saisir_adresse
 from session_calcul import bouton_nouveau_calcul, cle_calcul
 from cadastre import adresses
 from recherche_bien import saisir_reference, identifier_par_reference, saisir_commune
@@ -60,24 +61,23 @@ if etape == 1:
     automatique, selection_commune = (False, None)
     if mode_recherche == 'Parcelle cadastrale':
         automatique, selection_commune = saisir_commune(cle_calcul('hab_ref'), saisie.get('reference'))
-    with st.form(cle_calcul('hab_adresse')):
+    with st.container(border=True):
         reference = {}
         adresse = ''
+        adresse_selectionnee = None
         if mode_recherche == 'Adresse':
-            adresse = st.text_input('Adresse du bien', value=saisie.get('recherche', ''),
-                placeholder='Numéro, voie, code postal et commune',
-                help='Saisissez le numéro, la voie, le code postal et la commune du logement imposé.')
+            adresse, adresse_selectionnee = saisir_adresse('Adresse du bien', cle_calcul('hab_adresse'), saisie.get('recherche', ''))
         else:
             reference = saisir_reference(cle_calcul('hab_ref'), saisie.get('reference'), automatique=automatique, selection=selection_commune)
         nature = st.radio('Type de logement', ['Appartement (H2)', 'Maison (H1)'],
-            index=1 if saisie.get('nature') == 'M' else 0, horizontal=True,
+            index=1 if saisie.get('nature') == 'M' else 0, horizontal=True, key=cle_calcul('hab_nature'),
             help='H1 correspond aux maisons ; H2 aux appartements. Ce choix détermine le barème de surface et le traitement des dépendances.')
-        annee = st.number_input('Année d’imposition', min_value=2017, value=int(saisie.get('annee', date.today().year)), step=1,
+        annee = st.number_input('Année d’imposition', key=cle_calcul('hab_annee'), min_value=2017, value=int(saisie.get('annee', date.today().year)), step=1,
             help='Année de l’avis à estimer, sans plafond de saisie. Le calcul nécessite les coefficients officiels de cette année ; une donnée absente n’est pas extrapolée.')
         st.caption('Vous pouvez saisir une année future. Si son coefficient officiel n’est pas encore intégré, le simulateur vous l’indiquera sans inventer de montant.')
-        chercher = st.form_submit_button('Rechercher cette adresse' if mode_recherche == 'Adresse' else 'Rechercher cette parcelle', type='primary')
+        chercher = st.button('Rechercher cette adresse' if mode_recherche == 'Adresse' else 'Rechercher cette parcelle', type='primary')
     if chercher:
-        saisie.update(mode_recherche=mode_recherche, reference=reference, recherche=adresse.strip(), nature='M' if nature.startswith('Maison') else 'A', annee=int(annee))
+        saisie.update(mode_recherche=mode_recherche, reference=reference, recherche=adresse.strip(), adresse_suggestion=adresse_selectionnee, nature='M' if nature.startswith('Maison') else 'A', annee=int(annee))
         st.session_state.pop('hab_adresses', None)
         saisie.pop('adresse', None)
         if mode_recherche == 'Adresse' and len(adresse.strip()) < 6:
@@ -85,17 +85,17 @@ if etape == 1:
         else:
             try:
                 with st.spinner('Recherche du bien…'):
-                    st.session_state['hab_adresses'] = adresses(adresse) if mode_recherche == 'Adresse' else identifier_par_reference(reference)
+                    st.session_state['hab_adresses'] = ([adresse_selectionnee] if adresse_selectionnee is not None else adresses(adresse)) if mode_recherche == 'Adresse' else identifier_par_reference(reference)
                 if not st.session_state['hab_adresses']:
                     st.warning('Aucun bien trouvé. Vérifiez l’adresse ou les références cadastrales saisies.')
             except (ConnectionError, ValueError) as exc:
                 st.error('Recherche du bien indisponible : ' + str(exc))
     options = st.session_state.get('hab_adresses', [])
     # Un ancien résultat de recherche ne valide jamais une nouvelle saisie.
-    recherche_actuelle = (mode_recherche, reference, adresse.strip(), 'M' if nature.startswith('Maison') else 'A', int(annee))
-    recherche_sauvee = (saisie.get('mode_recherche', 'Adresse'), saisie.get('reference', {}), saisie.get('recherche'), saisie.get('nature'), saisie.get('annee'))
+    recherche_actuelle = (mode_recherche, reference, adresse.strip(), adresse_selectionnee, 'M' if nature.startswith('Maison') else 'A', int(annee))
+    recherche_sauvee = (saisie.get('mode_recherche', 'Adresse'), saisie.get('reference', {}), saisie.get('recherche'), saisie.get('adresse_suggestion'), saisie.get('nature'), saisie.get('annee'))
     if options and recherche_actuelle == recherche_sauvee:
-        choix = st.selectbox('Confirmez l’adresse du logement' if mode_recherche == 'Adresse' else 'Confirmez la parcelle du logement', range(len(options)), index=None,
+        choix = st.selectbox('Confirmez l’adresse du logement' if mode_recherche == 'Adresse' else 'Confirmez la parcelle du logement', range(len(options)), index=0 if adresse_selectionnee is not None else None,
             placeholder='Sélectionnez le bien exact', format_func=lambda i: options[i]['libelle'],
             key='hab_adresse_choix', help='Vérifiez la commune et l’arrondissement. La recherche peut proposer plusieurs adresses ; aucune n’est choisie automatiquement.')
         if st.button('Continuer vers les surfaces', type='primary', disabled=choix is None):
