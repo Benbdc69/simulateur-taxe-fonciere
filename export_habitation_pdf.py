@@ -158,7 +158,7 @@ def generer_pdf_habitation(d):
         for cle, calcul in frais.get('lignes', {}).items():
             story.append(Paragraph(f"{ph(LIBELLES.get(cle, cle))} · {calcul['taux']} % · "
                                    f"{eur(calcul['montant'])}", st['AxNormalH']))
-        libelle = 'Frais calculables' if frais['note'] else 'Frais de gestion estimés'
+        libelle = 'Frais calculables' if frais['total'] is None else 'Frais de gestion estimés'
         story.append(Paragraph(f"{libelle} : {eur(frais['frais'])} (CGI, article 1641).", st['AxNormalH']))
         if frais['total'] is not None:
             story.append(Paragraph(f"<b>Total estimé avec frais : {eur(frais['total'])}</b>.", st['AxNormalH']))

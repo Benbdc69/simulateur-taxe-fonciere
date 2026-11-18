@@ -13,11 +13,13 @@ class FraisGestionTests(unittest.TestCase):
         self.assertEqual(frais['lignes']['syndicat'], {'taux': 8, 'montant': 2.4})
         self.assertEqual(estimer_frais(montants, 2026, True)['total'], 403.2)
 
-    def test_taxe_speciale_positive_empeche_le_total_complet(self):
+    def test_taxe_speciale_positive_incluse_selon_le_beneficiaire(self):
         frais = estimer_frais({'commune': 100, 'taxes_speciales': 1}, 2025)
-        self.assertEqual(frais['frais'], 3)
-        self.assertIsNone(frais['total'])
-        self.assertTrue(frais['note'])
+        self.assertEqual(frais['frais'], 3.09)
+        self.assertEqual(frais['total'], 104.09)
+        self.assertIn('9 %', frais['note'])
+        alternatif = estimer_frais({'commune': 100, 'taxes_speciales': 1}, 2025, taux_taxes_speciales=8)
+        self.assertEqual(alternatif['total'], 104.08)
 
     def test_annees_hors_bareme(self):
         for annee in (2022, 2027):

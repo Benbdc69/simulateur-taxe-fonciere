@@ -77,7 +77,7 @@ def synthese_pdf(annee, nature, adresse, reference, profil, lignes, sous_total, 
     if not lignes:
         tableau.append([paragraphe('Cotisations indisponibles', 9), '—', '—', '—'])
     tableau.append(['Sous-total des cotisations', '', '', montant_pdf(sous_total)])
-    libelle_frais = 'Frais de gestion estimés' if not frais or not frais.get('note') else 'Frais de gestion calculables'
+    libelle_frais = 'Frais de gestion estimés' if not frais or total is not None else 'Frais de gestion calculables'
     tableau.append([libelle_frais, '', '', montant_pdf(frais.get('frais') if frais else None)])
     tableau.append(['Total estimé avec frais', '', '', euro_arrondi(total) if total is not None else '—'])
     tab = Table(tableau, colWidths=[7.6 * cm, 3.1 * cm, 2.5 * cm, 3.7 * cm], hAlign='LEFT')

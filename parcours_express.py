@@ -332,6 +332,8 @@ else:
             if total is not None:
                 st.metric('Taxe foncière estimée, frais inclus', euro_arrondi(total))
                 st.caption(f"Cotisations hors frais {euro(result['total_hors_frais'])} · Frais {euro(frais['frais'])}")
+                if 'taxes_speciales' in frais['lignes']:
+                    st.caption(f"Frais sur les taxes spéciales estimés à {frais['lignes']['taxes_speciales']['taux']} %.")
             else:
                 st.metric('Taxe foncière estimée hors frais', euro_arrondi(result['total_estime']))
         else:
