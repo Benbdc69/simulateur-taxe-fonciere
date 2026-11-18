@@ -44,27 +44,6 @@ def pct(val):
     return f'{float(val):,.2f}'.replace(',', ' ').replace('.', ',') + ' %'
 
 
-def _html(s: str) -> str:
-    return str(s).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-
-
-def render_tax_cards(lignes):
-    st.markdown('**Répartition par taxe**')
-    cols = st.columns(2)
-    for i, r in enumerate(lignes):
-        with cols[i % 2]:
-            st.markdown(
-                f'''<div class="tf-tax-card">
-                <div class="tf-tax-head">{_html(r['taxe'])}</div>
-                <div class="tf-tax-amount">{euro(r['montant'])}</div>
-                <div class="tf-tax-meta">Base : {_html(euro(r['base_taxable']))} · Taux : {_html(pct(r['taux_pct']))}</div>
-                <div class="tf-tax-meta">Exonération : {_html(pct(r['abattement_pct']))}</div>
-                </div>''',
-                unsafe_allow_html=True,
-            )
-
-
-
 def normaliser_identite(parcelle, adresse, ref):
     code = str(parcelle.get('insee') or adresse.get('insee') or '')
     code = insee_cadastral_adresse(code, adresse.get('code_postal', ''))
@@ -160,24 +139,10 @@ def finaliser(candidat, categorie, surfaces, annee, construction_nouvelle=False,
 st.markdown('''<style>
 .block-container{max-width:980px;padding-top:2rem;padding-bottom:4rem}
 section[data-testid="stSidebar"]{display:none}
-/* Habillage inspiré de la présence web Axens — sans modification fiscale. */
-.tf-summary-card,.tf-tax-card{border:1px solid #DFE8F2;background:#FFFFFF;color:#153957;border-radius:18px;padding:1.15rem 1.2rem;margin:.25rem 0 .8rem 0;box-shadow:0 5px 22px rgba(22,67,109,.055)}
-.tf-tax-card{border-left:4px solid #246A9D;min-height:176px}
-.tf-summary-card{border-top:3px solid #246A9D;min-height:152px}
-.tf-summary-label,.tf-tax-head{font-size:.88rem;font-weight:600;color:#547088;margin-bottom:.45rem}
-.tf-summary-value,.tf-tax-amount{font-size:1.55rem;font-weight:750;line-height:1.15;margin-bottom:.4rem;color:#164C79}
-.tf-summary-sub,.tf-tax-meta{font-size:.87rem;color:#526B80;line-height:1.45}
-.tf-table-wrap{border:1px solid #DFE8F2;border-radius:16px;overflow:hidden;margin-top:.6rem;background:#FFFFFF;color:#153957}
-.tf-detail-table{width:100%;border-collapse:collapse;font-size:.95rem}
-.tf-detail-table thead th{background:#EAF2F8;font-weight:600;text-align:left;padding:.8rem .9rem}
-.tf-detail-table tbody td{padding:.8rem .9rem;border-top:1px solid #E5EDF5}
-.tf-detail-table td.num,.tf-detail-table th.num{text-align:right}
-.tf-detail-table .strong{font-weight:700;color:#164C79}
 /* Les boutons sont pilotés par primaryColor ; ce style sert de filet de sécurité
    si le thème n'a pas encore été rechargé sur le serveur. */
 div.stButton > button[kind="primary"],div.stFormSubmitButton > button[kind="primary"]{background:#246A9D!important;border-color:#246A9D!important;color:#FFFFFF!important}
 div.stButton > button[kind="primary"]:hover,div.stFormSubmitButton > button[kind="primary"]:hover{background:#164C79!important;border-color:#164C79!important}
-@media (max-width: 640px){.tf-detail-table{font-size:.88rem}.tf-tax-card{min-height:0}}
 </style>''',unsafe_allow_html=True)
 bouton_nouveau_calcul()
 st.title('Estimez votre taxe foncière')
@@ -343,73 +308,58 @@ if calcule:
     st.divider()
     st.subheader('Votre estimation')
     st.caption(f"{calcule['adresse']} · {calcule['annee']} · {calcule['categorie']}")
+    bien = calcule['bien']
+    st.caption(f"Parcelle {bien['section']} {bien['numero']} · {bien['commune']}")
+    synthese = st.container()
+    rapport, declaration = st.columns(2)
     frais = None
     if result:
-        st.metric('Montant estimé des taxes, hors frais de gestion',euro(result['total_estime']))
-        exo = analyse.get('exoneration_neuf', {})
-        if exo.get('active'):
-            st.caption(f"Construction achevée en {exo['annee_achevement']} : exonération de 40 % appliquée à la part communale et aux taxes additionnelles éligibles (hors EPCI à fiscalité propre et TEOM), sous réserve des conditions déclaratives.")
-        else:
-            st.caption('Estimation de base sans autres exonérations particulières ni corrections historiques non fournies ; frais de gestion non inclus.')
-        if exo.get('a_verifier') and not exo.get('active'):
-            st.caption('Construction nouvelle : régime antérieur à 2021 à vérifier selon l’année simulée.')
-        render_tax_cards(result['lignes'])
         frais = afficher_frais({ligne['cle']: ligne['montant'] for ligne in result['lignes']},
                                calcule['annee'], TAXES, euro, cle_calcul('frais_teom_express'))
-    else:
-        st.info('La valeur locative peut être estimée, mais une cotisation complète ne peut pas être établie sans inventer certains paramètres officiels.')
-        if partial['valeur_locative_brute'] is not None:
-            st.metric('Valeur locative brute estimée',euro(partial['valeur_locative_brute']))
-        st.caption('Données indisponibles : '+', '.join(analyse['missing']))
-    c1,c2,c3 = st.columns(3)
-    with c1:
-        st.markdown(
-            f'''<div class="tf-summary-card">
-                <div class="tf-summary-label">Surface pondérée</div>
-                <div class="tf-summary-value">{f"{partial['surface_ponderee']:,.2f}".replace(',', ' ')} m²</div>
-                <div class="tf-summary-sub">Calculée automatiquement à partir des surfaces 6660-REV</div>
-            </div>''',
-            unsafe_allow_html=True,
-        )
-    with c2:
-        vl_text = euro(partial['valeur_locative_brute']) if partial['valeur_locative_brute'] is not None else 'Indisponible'
-        st.markdown(
-            f'''<div class="tf-summary-card">
-                <div class="tf-summary-label">Valeur locative brute</div>
-                <div class="tf-summary-value">{vl_text}</div>
-                <div class="tf-summary-sub">Avant frais de gestion et sous réserve des paramètres publics</div>
-            </div>''',
-            unsafe_allow_html=True,
-        )
-    with c3:
-        parcelle = f"{calcule['bien']['section']} {calcule['bien']['numero']}"
-        st.markdown(
-            f'''<div class="tf-summary-card">
-                <div class="tf-summary-label">Parcelle cadastrale</div>
-                <div class="tf-summary-value">{parcelle}</div>
-                <div class="tf-summary-sub">{calcule['bien']['commune']} · Code {calcule['bien']['code_insee']}</div>
-            </div>''',
-            unsafe_allow_html=True,
-        )
-    planch = analyse.get('planchonnement', {})
-    if planch.get('applique'):
-        st.caption('Planchonnement : corrections de base historiques intégrées aux composantes renseignées.')
-    if planch.get('reserve'):
-        st.warning(planch['reserve'])
-    st.caption('Estimation hors frais de gestion. Les conditions déclaratives, changements du local et éventuel lissage jusqu’en 2025 doivent être contrôlés.')
-    stale=[f"{r['annee_source']} : {key}" for key,r in analyse['taux'].items() if r and r.get('decalage',0)>0]
-    if stale: st.caption('Taux repris d’un millésime antérieur : '+', '.join(stale)+'.')
-    if analyse['neutral_warnings']:st.caption('Certaines neutralisations historiques ont été reprises à titre provisoire.')
-    st.download_button(
+    with synthese:
+        if result:
+            total = frais.get('total') if frais else None
+            if total is not None:
+                st.metric('Taxe foncière estimée, frais inclus', euro(total))
+                st.caption(f"Cotisations hors frais {euro(result['total_hors_frais'])} · Frais {euro(frais['frais'])}")
+            else:
+                st.metric('Taxe foncière estimée hors frais', euro(result['total_estime']))
+        else:
+            if partial['valeur_locative_brute'] is not None:
+                st.metric('Valeur locative brute estimée', euro(partial['valeur_locative_brute']))
+            st.warning('Cotisations indisponibles. Données manquantes : '+', '.join(analyse['missing']))
+        planch = analyse.get('planchonnement', {})
+        if planch.get('reserve'):
+            st.warning(planch['reserve'])
+    rapport.download_button(
         'Télécharger mon estimation en PDF',
         data=creer_pdf_estimation({**calcule, 'frais': frais}),
-        file_name=f"estimation_taxe_fonciere_{calcule['annee']}_{calcule['bien']['code_insee']}.pdf",
+        file_name=f"estimation_taxe_fonciere_{calcule['annee']}_{bien['code_insee']}.pdf",
         mime='application/pdf',
         use_container_width=True,
         key='export_pdf_express',
     )
-    afficher_declaration('6660-rev', calcule)
-    with st.expander('Voir les paramètres utilisés et les sources'):
+    with declaration:
+        afficher_declaration('6660-rev', calcule)
+    with st.expander('Détail des cotisations, du calcul et des sources'):
+        if result:
+            st.table([{'Taxe': ligne['taxe'], 'Base': euro(ligne['base_taxable']),
+                       'Taux': pct(ligne['taux_pct']), 'Cotisation': euro(ligne['montant'])}
+                      for ligne in result['lignes']])
+        st.caption('Estimation sous réserve des régimes particuliers et du lissage éventuel jusqu’en 2025.')
+        exo = analyse.get('exoneration_neuf', {})
+        if exo.get('active'):
+            st.caption('Construction nouvelle : exonération de 40 % appliquée aux composantes éligibles.')
+        elif exo.get('a_verifier'):
+            st.caption('Construction nouvelle : régime antérieur à 2021 à vérifier selon l’année simulée.')
+        stale = [f"{v['annee_source']} · {TAXES[k]}" for k, v in analyse['taux'].items()
+                 if v and v.get('decalage', 0) > 0]
+        if stale:
+            st.caption('Taux antérieurs : '+', '.join(stale)+'.')
+        if analyse['neutral_warnings']:
+            st.caption('Certaines neutralisations historiques ont été reprises à titre provisoire.')
+        st.caption(f"Surface pondérée : {partial['surface_ponderee']:g} m²")
+
         st.write({'Commune':calcule['bien']['commune'],'Code cadastral':calcule['bien']['code_insee'],
                   'Parcelle':calcule['bien']['section']+' '+calcule['bien']['numero'],
                   'Secteur':partial['secteur'],'Coefficient de localisation':partial['localisation'],

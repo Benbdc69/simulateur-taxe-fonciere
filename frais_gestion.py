@@ -47,8 +47,6 @@ def afficher_frais(montants, annee, libelles, formater, cle, perimetre=''):
             st.table([{'Cotisation': libelles[k], 'Taux de frais': f"{ligne['taux']} %",
                        'Frais estimés': formater(ligne['montant'])} for k, ligne in frais['lignes'].items()])
         st.write(f"**{'Frais calculables' if frais['note'] else 'Frais de gestion'} : {formater(frais['frais'])}**")
-        if frais['total'] is not None:
-            st.metric('Total estimé, frais de gestion inclus', formater(frais['total']))
         if frais['note']:
             st.info(frais['note'])
         st.caption(f'Calcul indicatif avant les arrondis de l’avis fiscal. [CGI, article 1641]({SOURCE})')

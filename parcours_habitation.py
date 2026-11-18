@@ -373,82 +373,57 @@ else:
 .hab-result-detail{font-size:.86rem;color:#526B80;line-height:1.5;margin-top:.55rem}
 .hab-result-main{background:#EDF4F9;border-left:5px solid #246A9D;border-top:1px solid #DFE8F2;min-height:0;padding:1.4rem 1.5rem}
 .hab-result-main .hab-result-value{font-size:clamp(2rem,6vw,3rem)}
-.hab-tax-card{border-top:1px solid #DFE8F2;border-left:4px solid #246A9D;min-height:155px}
 @media(max-width:640px){.hab-result-card{min-height:0;padding:1rem}.hab-result-value{font-size:1.45rem}}
 </style>""", unsafe_allow_html=True)
         st.subheader('Votre estimation habitation')
         st.caption(f"{r['adresse']} · {r['nature']} · Année {r['annee']}")
-        for reserve in r.get('reserves_h2', []):
-            st.warning(reserve)
-        for incident in r['incidents']:
-            st.warning(incident)
-        if not r.get('categorie_confirmee'):
-            st.warning(f"Catégorie {r['categorie']} choisie à titre indicatif avec l’aide au classement : à confirmer sur la fiche d’évaluation cadastrale.")
         scenarios = r['tarifs']
+        choice = 0
         if len(scenarios) > 1:
-            st.info(f"Plusieurs séries tarifaires sont publiées dans la catégorie {r['categorie']}. La série exacte et son origine sont à confirmer sur votre fiche cadastrale.")
-            totals = [t['total'] for t in scenarios if 'total' in t]
-            if totals:
-                st.write(f"**Fourchette des séries — catégorie {r['categorie']} : {fmt(min(totals))} à {fmt(max(totals))}**, pour le nombre de pièces chauffées déclaré et le logement avec ses dépendances rattachées, hors frais, exonérations et dépendances distinctes.")
-            else:
-                bases = [t['base_tf'] for t in scenarios]
-                st.write(f"**Fourchette des bases TFPB — catégorie {r['categorie']} : {fmt(min(bases))} à {fmt(max(bases))}**. Les cotisations restent indisponibles faute de taux documentés.")
-        choice = st.selectbox('Scénario à examiner', range(len(scenarios)),
-            format_func=lambda i: f"Catégorie {scenarios[i]['categorie']} · Série {scenarios[i]['serie']} · Origine {scenarios[i]['origine'] or 'non précisée'} · {fmt(scenarios[i]['tarif_1970'])}/m²",
-            help='Choisissez une série de la catégorie retenue. Ce choix ne confirme pas son attribution au logement.')
+            choice = st.selectbox('Scénario à examiner', range(len(scenarios)),
+                format_func=lambda i: f"Catégorie {scenarios[i]['categorie']} · Série {scenarios[i]['serie']} · Origine {scenarios[i]['origine'] or 'non précisée'} · {fmt(scenarios[i]['tarif_1970'])}/m²",
+                help='Choisissez une série de la catégorie retenue. Ce choix ne confirme pas son attribution au logement.')
         x = scenarios[choice]
-        if 'pieces_chauffage_scenario' in x:
-            st.info(f"Chauffage pris en compte : {x['pieces_chauffage_scenario']} × 2 m² = +{2*x['pieces_chauffage_scenario']} m² d’équivalence de surface. Cette majoration s’ajoute à la surface nette avant application du tarif cadastral. Le nombre de pièces chauffées est celui que vous avez saisi, sans déduction automatique.")
-        sp = x['surfaces']
-        if sp.get('terrasse_ponderee', 0) or r.get('terrasse_reelle', 0):
-            t = sp['detail_terrasse']
-            st.info(f"Terrasse intégrée : {t['surface_declaree']:g} m² déclarés → {t['surface_reelle_retenue']} m² réels retenus × {t['coefficient']:g} → {t['surface_ponderee']} m² pondérés après arrondi inférieur, retenus parmi les éléments secondaires avant leurs correctifs, hors ascenseur. Coefficient à confirmer sur la fiche cadastrale.")
-        if sp['dependances_a_evaluer_separement']:
-            st.warning('Estimation partielle : des surfaces de dépendances anciennement regroupées ne sont pas ventilées. Précisez leur traitement dans le cadre 5 pour les chiffrer.')
-        if not r['taux_complets']:
-            missing = [LIBELLES[k] for k in COMPOSANTES if not r['taux'].get(k) or r['taux'][k].get('taux') is None]
-            st.warning('Taux non documentés : ' + ', '.join(missing) + '. Aucun total de cotisations n’est affiché ; un taux manquant ne vaut pas zéro.')
-        anciens = [f"{LIBELLES[k]} ({v['annee_source']})" for k, v in r['taux'].items() if v and v['annee_source'] < r['annee']]
-        if anciens:
-            st.warning('Taux antérieurs repris à titre indicatif : ' + ', '.join(anciens) + '.')
-        if r['taux'].get('teom') and not r['taux']['teom'].get('zonage_confirme'):
-            st.warning('Le zonage TEOM n’est pas confirmé pour cette adresse : la cotisation correspondante reste à vérifier.')
-        if sp['nature'] == 'A':
-            st.caption(f"Ascenseur de l’immeuble : {'oui' if sp['detail_correctifs']['ascenseur_immeuble'] else 'non'} · Niveau retenu : {sp['detail_correctifs']['niveau_local']} · Correctif article 324 S : {sp['correctif_ascenseur']:+.2f}, appliqué à la partie principale uniquement.")
-        if 'montants' in x:
-            carte_habitation(
-                'Cotisations annuelles estimées — logement et dépendances rattachées', fmt(x['total']),
-                'Hors frais de gestion et exonérations. Sous réserve du classement cadastral, des taux et du zonage TEOM. Dépendances distinctes non incluses.',
-                principale=True,
-            )
-        else:
-            carte_habitation('Valeur locative estimée', fmt(x['vl_annee']),
-                'Il s’agit de la valeur locative, pas du montant de taxe à payer. Les taux manquants empêchent de calculer les cotisations.', principale=True)
-        a, b, c = st.columns(3)
-        with a:
-            carte_habitation('Surface pondérée', f"{sp['surface_ponderee']} m²",
-                'Surface cadastrale calculée à partir des surfaces et des équipements déclarés.')
-        with b:
-            carte_habitation(f"Valeur locative {r['annee']}", fmt(x['vl_annee']),
-                'Valeur de référence revalorisée pour l’année d’imposition.')
-        with c:
-            carte_habitation('Base de taxe foncière', fmt(x['base_tf']),
-                '50 % de la valeur locative, avant exonérations particulières.')
-        if 'montants' in x:
-            st.markdown('#### Répartition par taxe')
-            colonnes = st.columns(2)
-            for i, (cle, montant) in enumerate(x['montants'].items()):
-                taux = r['taux'][cle]
-                with colonnes[i % 2]:
-                    st.markdown(
-                        '<div class="hab-result-card hab-tax-card">'
-                        f'<div class="hab-result-label">{escape(LIBELLES[cle])}</div>'
-                        f'<div class="hab-result-value">{escape(fmt(montant))}</div>'
-                        f'<div class="hab-result-detail">Base : {escape(fmt(x["base_tf"]))} · Taux : {float(taux["taux"]):g} %<br/>'
-                        f'Millésime du taux : {int(taux["annee_source"])}</div></div>',
-                        unsafe_allow_html=True,
-                    )
-        with st.expander('Comprendre le calcul, étape par étape', expanded=False):
+        synthese = st.container()
+        rapport, declaration = st.columns(2)
+        with st.expander('Détail des cotisations, du calcul et des sources'):
+            if 'montants' in x:
+                st.table([{'Taxe': LIBELLES[cle], 'Base': fmt(x['base_tf']),
+                           'Taux': f"{r['taux'][cle]['taux']:g} %", 'Cotisation': fmt(montant)}
+                          for cle, montant in x['montants'].items()])
+            if len(scenarios) > 1:
+                st.info(f"Plusieurs séries tarifaires sont publiées dans la catégorie {r['categorie']}. La série exacte et son origine sont à confirmer sur votre fiche cadastrale.")
+                totals = [t['total'] for t in scenarios if 'total' in t]
+                if totals:
+                    st.write(f"**Fourchette des séries — catégorie {r['categorie']} : {fmt(min(totals))} à {fmt(max(totals))}**, pour le nombre de pièces chauffées déclaré et le logement avec ses dépendances rattachées, hors frais, exonérations et dépendances distinctes.")
+                else:
+                    bases = [t['base_tf'] for t in scenarios]
+                    st.write(f"**Fourchette des bases TFPB — catégorie {r['categorie']} : {fmt(min(bases))} à {fmt(max(bases))}**. Les cotisations restent indisponibles faute de taux documentés.")
+            for reserve in r.get('reserves_h2', []):
+                st.warning(reserve)
+            for incident in r['incidents']:
+                st.warning(incident)
+            if not r.get('categorie_confirmee'):
+                st.warning(f"Catégorie {r['categorie']} choisie à titre indicatif avec l’aide au classement : à confirmer sur la fiche d’évaluation cadastrale.")
+            if 'pieces_chauffage_scenario' in x:
+                st.info(f"Chauffage pris en compte : {x['pieces_chauffage_scenario']} × 2 m² = +{2*x['pieces_chauffage_scenario']} m² d’équivalence de surface. Cette majoration s’ajoute à la surface nette avant application du tarif cadastral. Le nombre de pièces chauffées est celui que vous avez saisi, sans déduction automatique.")
+            sp = x['surfaces']
+            if sp.get('terrasse_ponderee', 0) or r.get('terrasse_reelle', 0):
+                t = sp['detail_terrasse']
+                st.info(f"Terrasse intégrée : {t['surface_declaree']:g} m² déclarés → {t['surface_reelle_retenue']} m² réels retenus × {t['coefficient']:g} → {t['surface_ponderee']} m² pondérés après arrondi inférieur, retenus parmi les éléments secondaires avant leurs correctifs, hors ascenseur. Coefficient à confirmer sur la fiche cadastrale.")
+            if sp['dependances_a_evaluer_separement']:
+                st.warning('Estimation partielle : des surfaces de dépendances anciennement regroupées ne sont pas ventilées. Précisez leur traitement dans le cadre 5 pour les chiffrer.')
+            if not r['taux_complets']:
+                missing = [LIBELLES[k] for k in COMPOSANTES if not r['taux'].get(k) or r['taux'][k].get('taux') is None]
+                st.warning('Taux non documentés : ' + ', '.join(missing) + '. Aucun total de cotisations n’est affiché ; un taux manquant ne vaut pas zéro.')
+            anciens = [f"{LIBELLES[k]} ({v['annee_source']})" for k, v in r['taux'].items() if v and v['annee_source'] < r['annee']]
+            if anciens:
+                st.warning('Taux antérieurs repris à titre indicatif : ' + ', '.join(anciens) + '.')
+            if r['taux'].get('teom') and not r['taux']['teom'].get('zonage_confirme'):
+                st.warning('Le zonage TEOM n’est pas confirmé pour cette adresse : la cotisation correspondante reste à vérifier.')
+            if sp['nature'] == 'A':
+                st.caption(f"Ascenseur de l’immeuble : {'oui' if sp['detail_correctifs']['ascenseur_immeuble'] else 'non'} · Niveau retenu : {sp['detail_correctifs']['niveau_local']} · Correctif article 324 S : {sp['correctif_ascenseur']:+.2f}, appliqué à la partie principale uniquement.")
+            st.markdown('#### Étapes du calcul')
             st.write(f"1. Surface comparative : **{sp['comparative']} m²**, issue du barème de catégorie {x['categorie']}.")
             net = sp['detail_surface_nette']
             if net['mode'] == 'separe':
@@ -459,18 +434,16 @@ else:
             st.table([{'Équipement': k, 'Équivalence (m²)': v} for k, v in sp['detail_confort'].items() if v])
             st.write(f"4. Valeur locative 1970 : {sp['surface_ponderee']} m² × {fmt(x['tarif_1970'])}/m² = **{fmt(x['vl_1970'])}**.")
             st.write(f"5. Actualisation 1980 × {r['facteur']['actualisation_1980']} ; revalorisation nationale × {r['facteur']['revalorisation_nationale']} → **{fmt(x['vl_annee'])}**. La moitié forme la base TFPB : **{fmt(x['base_tf'])}**.")
-        if r.get('dependances'):
-            st.markdown('#### Dépendances déclarées')
-            st.table([{'Élément': d['designation'], 'Surface (m²)': d['surface'], 'Traitement': MODES[d['mode']],
-                'Surface pondérée rattachée (m²)': f"{d['surface_ponderee']:g} m²" if d['mode']=='incorporee' else 'Évaluation distincte'} for d in r['dependances']])
-            for d in r.get('dependances_distinctes', []):
-                if 'total' in d:
-                    st.write(f"**{d['designation']}** · Base distincte {fmt(d['base_tf'])} · Cotisations : **{fmt(d['total'])}**, avec les taux du logement confirmés pour cette dépendance.")
-                else:
-                    st.warning(f"{d['designation']} : évaluation distincte non chiffrée. Il faut une base de l’année simulée et des taux/zonage confirmés. Le montant du logement ne constitue pas le total du bien.")
-            if r.get('dependances_distinctes') and 'total_bien' in x:
-                carte_habitation('Total estimé — logement et dépendances distinctes comprises', fmt(x['total_bien']), 'Hors frais et exonérations ; bases et taux distincts renseignés.', principale=True)
-        with st.expander('Sources et millésimes utilisés'):
+            if r.get('dependances'):
+                st.markdown('#### Dépendances déclarées')
+                st.table([{'Élément': d['designation'], 'Surface (m²)': d['surface'], 'Traitement': MODES[d['mode']],
+                    'Surface pondérée rattachée (m²)': f"{d['surface_ponderee']:g} m²" if d['mode']=='incorporee' else 'Évaluation distincte'} for d in r['dependances']])
+                for d in r.get('dependances_distinctes', []):
+                    if 'total' in d:
+                        st.write(f"**{d['designation']}** · Base distincte {fmt(d['base_tf'])} · Cotisations : **{fmt(d['total'])}**, avec les taux du logement confirmés pour cette dépendance.")
+                    else:
+                        st.warning(f"{d['designation']} : évaluation distincte non chiffrée. Il faut une base de l’année simulée et des taux/zonage confirmés. Le montant du logement ne constitue pas le total du bien.")
+            st.markdown('#### Sources et millésimes')
             st.write('Tarifs cadastraux DGFiP 2024 en valeur de référence 1970 : ' + SOURCE)
             if r.get('terrasse_reelle', 0):
                 st.write('Pondération de la terrasse — DGFiP, brochure IDL 2025, p. 23 (articles 324 M/N) : '+sp['detail_terrasse']['source'])
@@ -489,9 +462,25 @@ else:
                         cotisations[cle] += montant
             frais = afficher_frais(cotisations, r['annee'], LIBELLES, fmt,
                                    cle_calcul('frais_teom_habitation'), perimetre_frais)
+        with synthese:
+            if 'montants' in x:
+                total = frais.get('total') if frais else None
+                cotisations = x.get('total_bien', x['total'])
+                if total is not None:
+                    carte_habitation('Cotisations annuelles estimées, frais inclus', fmt(total),
+                                     f"{perimetre_frais.capitalize()} · Dont frais : {fmt(frais['frais'])}", principale=True)
+                else:
+                    carte_habitation('Cotisations annuelles estimées hors frais', fmt(cotisations),
+                                     perimetre_frais.capitalize(), principale=True)
+                if not r.get('dependances_completes', True):
+                    st.caption('Certaines dépendances évaluées distinctement restent hors estimation.')
+            else:
+                carte_habitation('Valeur locative estimée', fmt(x['vl_annee']),
+                                 'Cotisations indisponibles : certains taux sont manquants.', principale=True)
         dossier_pdf = {**r, 'categorie': x['categorie'], 'surfaces': sp, 'tarifs': scenarios,
                        'frais': frais, 'perimetre_frais': perimetre_frais}
         dossier_pdf['serie_selectionnee'] = dossier_pdf['tarifs'].index(x)
-        st.download_button('Télécharger le rapport PDF de ce scénario', data=generer_pdf_habitation(dossier_pdf),
+        rapport.download_button('Télécharger le rapport PDF de ce scénario', data=generer_pdf_habitation(dossier_pdf),
             file_name=f"estimation_habitation_{r['annee']}_{r['code_insee']}.pdf", mime='application/pdf', use_container_width=True)
-        afficher_declaration('h1' if saisie['nature'] == 'M' else 'h2', saisie)
+        with declaration:
+            afficher_declaration('h1' if saisie['nature'] == 'M' else 'h2', saisie)
