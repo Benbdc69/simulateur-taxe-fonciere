@@ -134,6 +134,17 @@ def generer_pdf_habitation(d):
             story.append(Paragraph(texte,st['AxNormalH']))
         if d.get('dependances_distinctes') and 'total_bien' in chosen:
             story.append(Paragraph('<b>Total estimé du bien, dépendances distinctes comprises : '+eur(chosen['total_bien'])+'</b> (hors frais et exonérations).',st['AxNormalH']))
+    frais = d.get('frais')
+    if frais:
+        story.append(Paragraph('Frais de gestion · '+ph(d['perimetre_frais']), st['AxHeadH']))
+        libelle = 'Frais calculables' if frais['note'] else 'Frais de gestion estimés'
+        story.append(Paragraph(f"{libelle} : {eur(frais['frais'])} (CGI, article 1641).", st['AxNormalH']))
+        if frais['total'] is not None:
+            story.append(Paragraph(f"<b>Total estimé avec frais : {eur(frais['total'])}</b>.", st['AxNormalH']))
+        if frais['teom']:
+            story.append(Paragraph(f"Taux de frais appliqué à la TEOM : {frais['teom']} %.", st['AxNormalH']))
+        if frais['note']:
+            story.append(Paragraph(ph(frais['note']), st['AxNormalH']))
     if d.get('terrasse_reelle',0) and d['surfaces'].get('detail_terrasse'):
         terrasse=d['surfaces']['detail_terrasse']
         story.append(Paragraph('Terrasse intégrée au logement : '+ph(terrasse['surface_declaree'])+' m² déclarés ; '+ph(terrasse['surface_reelle_retenue'])+' m² réels retenus x '+ph(terrasse['coefficient'])+' = '+ph(terrasse['surface_ponderee'])+' m² pondérés après arrondi inférieur, avant correctif d’ensemble. Coefficient à confirmer sur la fiche cadastrale. Référence : articles 324 M/N, brochure DGFiP IDL 2025 p. 23.',st['AxNormalH']))

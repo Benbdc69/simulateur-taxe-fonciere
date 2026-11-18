@@ -34,6 +34,7 @@ def creer_pdf_estimation(dossier):
     """Retourne les octets PDF pour un dossier issu de ``finaliser``."""
     analyse = dossier['analyse']
     result = analyse.get('result')
+    frais = dossier.get('frais')
     partial = analyse['partial']
     bien = dossier['bien']
     styles = getSampleStyleSheet()
@@ -98,6 +99,15 @@ def creer_pdf_estimation(dossier):
             ('BOTTOMPADDING',(0,0),(-1,-1),9),
         ]))
         story.extend([total_card, Spacer(1, 15)])
+        if frais:
+            libelle = 'Frais calculables' if frais['note'] else 'Frais de gestion estimés'
+            story.append(Paragraph(f"{libelle} : {_nombre(frais['frais'])} EUR (CGI, article 1641).", styles['CorpsTF']))
+            if frais['total'] is not None:
+                story.append(Paragraph(f"<b>Total estimé avec frais : {_nombre(frais['total'])} EUR</b>.", styles['CorpsTF']))
+            if frais['teom']:
+                story.append(Paragraph(f"Taux de frais appliqué à la TEOM : {frais['teom']} %.", styles['PetitTF']))
+            if frais['note']:
+                story.append(Paragraph(_texte(frais['note']), styles['PetitTF']))
         story.append(Paragraph('<font color="#164C79"><b>Répartition par taxe</b></font>', styles['Heading3']))
         lignes = result['lignes']
         cards = []
@@ -159,7 +169,7 @@ def creer_pdf_estimation(dossier):
         story.append(Paragraph('Certaines neutralisations historiques ont été reprises à titre provisoire.',styles['PetitTF']))
     story.append(Spacer(1, 12))
     story.append(Paragraph('<b>Réserves importantes</b>',styles['Heading3']))
-    story.append(Paragraph('Estimation sans autres exonérations particulières, sans frais de gestion et sans corrections historiques non documentées. '
+    story.append(Paragraph('Estimation hors exonérations particulières et corrections historiques non documentées. '
                            'Pour un local existant avant 2017, le planchonnement et, jusqu’en 2025, le lissage peuvent modifier sensiblement la cotisation. '
                            'Les taux repris d’années antérieures et les zones TEOM doivent être vérifiés. Pour une construction nouvelle, l’exonération de l’article 1383 II du CGI suppose le respect des formalités déclaratives (90 jours).',styles['PetitTF']))
     # Annexe de contrôle : uniquement dans le PDF. Utilise les sorties déjà calculées
@@ -213,7 +223,11 @@ def creer_pdf_estimation(dossier):
             cb.append(Paragraph('Base avant exonération '+_nombre(line.get('base_avant_abattement'))+' EUR x (1 - '+_nombre(line.get('abattement_pct'))+' %) = base taxable <b>'+_nombre(line.get('base_taxable'))+' EUR</b>.',styles['PetitTF']))
             cb.append(Paragraph('Base taxable '+_nombre(line.get('base_taxable'))+' EUR x taux '+_nombre(line.get('taux_pct'))+' % = cotisation <b>'+_nombre(line.get('montant'))+' EUR</b>.',styles['PetitTF']))
             story.append(KeepTogether(cb+[Spacer(1,5)]))
-        story.append(Paragraph('<b>Total des composantes : '+_nombre(result.get('total_hors_frais'))+' EUR</b> ; frais estimés '+_nombre(result.get('frais_gestion_estimes'))+' EUR ; lissage '+_nombre(result.get('correction_lissage'))+' EUR ; <b>total affiché : '+_nombre(result.get('total_estime'))+' EUR</b>.',styles['CorpsTF']))
+        story.append(Paragraph('<b>Total des composantes avant frais : '+_nombre(result.get('total_hors_frais'))+' EUR</b>.', styles['CorpsTF']))
+        if result.get('correction_lissage') or result.get('frais_gestion_estimes'):
+            story.append(Paragraph('Ajustements du moteur : frais saisis '+_nombre(result.get('frais_gestion_estimes'))
+                                   +' EUR, lissage '+_nombre(result.get('correction_lissage'))
+                                   +' EUR, total '+_nombre(result.get('total_estime'))+' EUR.', styles['CorpsTF']))
         story.append(Paragraph('Les opérations sont effectuées par le moteur avec les valeurs numériques non arrondies ; le présent rapport arrondit leur affichage à deux décimales. Une correction de planchonnement affichée à zéro ne démontre pas qu’aucun planchonnement n’est applicable.',styles['PetitTF']))
     else:
         story.append(Paragraph('Aucune cotisation détaillée ne peut être affichée : les taux, tarifs, neutralisations ou autres paramètres requis sont incomplets.',styles['PetitTF']))

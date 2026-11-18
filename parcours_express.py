@@ -20,6 +20,7 @@ from historique_taux import resoudre_tout
 from mise_a_jour_simple import synchroniser_dgfip, synchroniser_taux
 from export_pdf import creer_pdf_estimation
 from saisie_declaration import afficher_declaration
+from frais_gestion import afficher_frais
 from mesure_cadastrale import afficher_mesures
 from exoneration_neuf import exon_neuf_non_habitation
 from planchonnement_saisie import preparer_planchonnement, valider_corrections
@@ -342,6 +343,7 @@ if calcule:
     st.divider()
     st.subheader('Votre estimation')
     st.caption(f"{calcule['adresse']} · {calcule['annee']} · {calcule['categorie']}")
+    frais = None
     if result:
         st.metric('Montant estimé des taxes, hors frais de gestion',euro(result['total_estime']))
         exo = analyse.get('exoneration_neuf', {})
@@ -352,6 +354,8 @@ if calcule:
         if exo.get('a_verifier') and not exo.get('active'):
             st.caption('Construction nouvelle : régime antérieur à 2021 à vérifier selon l’année simulée.')
         render_tax_cards(result['lignes'])
+        frais = afficher_frais({ligne['cle']: ligne['montant'] for ligne in result['lignes']},
+                               calcule['annee'], TAXES, euro, cle_calcul('frais_teom_express'))
     else:
         st.info('La valeur locative peut être estimée, mais une cotisation complète ne peut pas être établie sans inventer certains paramètres officiels.')
         if partial['valeur_locative_brute'] is not None:
@@ -398,7 +402,7 @@ if calcule:
     if analyse['neutral_warnings']:st.caption('Certaines neutralisations historiques ont été reprises à titre provisoire.')
     st.download_button(
         'Télécharger mon estimation en PDF',
-        data=creer_pdf_estimation(calcule),
+        data=creer_pdf_estimation({**calcule, 'frais': frais}),
         file_name=f"estimation_taxe_fonciere_{calcule['annee']}_{calcule['bien']['code_insee']}.pdf",
         mime='application/pdf',
         use_container_width=True,

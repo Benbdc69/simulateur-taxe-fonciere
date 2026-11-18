@@ -20,6 +20,7 @@ from tarifs_habitation import tarifs_nationaux, SOURCE
 from dossier_habitation import code_adresse, calculer_scenarios, H2_PIECES
 from export_habitation_pdf import generer_pdf_habitation
 from saisie_declaration import afficher_declaration
+from frais_gestion import afficher_frais
 
 ROOT = Path(__file__).resolve().parent
 
@@ -466,8 +467,20 @@ else:
             st.write(r['facteur']['source_departement'])
             st.write(r['facteur']['source_revalorisation'])
             st.table([{'Composante': LIBELLES[k], 'Taux (%)': v['taux'], 'Année source': v['annee_source'], 'Source': v.get('source', '')} for k, v in r['taux'].items() if v])
-        dossier_pdf = {**r, 'categorie': x['categorie'], 'surfaces': sp,
-            'tarifs': scenarios}
+        frais = None
+        perimetre_frais = 'logement et dépendances rattachées'
+        if 'montants' in x:
+            cotisations = dict(x['montants'])
+            distinctes = r.get('dependances_distinctes', [])
+            if distinctes and 'total_bien' in x:
+                perimetre_frais = 'logement et toutes les dépendances'
+                for dependance in distinctes:
+                    for cle, montant in dependance['montants'].items():
+                        cotisations[cle] += montant
+            frais = afficher_frais(cotisations, r['annee'], LIBELLES, fmt,
+                                   cle_calcul('frais_teom_habitation'), perimetre_frais)
+        dossier_pdf = {**r, 'categorie': x['categorie'], 'surfaces': sp, 'tarifs': scenarios,
+                       'frais': frais, 'perimetre_frais': perimetre_frais}
         dossier_pdf['serie_selectionnee'] = dossier_pdf['tarifs'].index(x)
         st.download_button('Télécharger le rapport PDF de ce scénario', data=generer_pdf_habitation(dossier_pdf),
             file_name=f"estimation_habitation_{r['annee']}_{r['code_insee']}.pdf", mime='application/pdf', use_container_width=True)
