@@ -19,6 +19,7 @@ from moteur_habitation import ENTRETIEN, SITUATION, CATEGORIES
 from tarifs_habitation import tarifs_nationaux, SOURCE
 from dossier_habitation import code_adresse, calculer_scenarios, H2_PIECES
 from export_habitation_pdf import generer_pdf_habitation
+from export_cerfa import creer_cerfa
 
 ROOT = Path(__file__).resolve().parent
 
@@ -346,6 +347,16 @@ else:
                 st.session_state['hab_resultat'] = {**r, 'incidents': incidents, 'source_tarifs': SOURCE}
             except (ValueError, RuntimeError, ConnectionError) as exc:
                 st.error('Estimation indisponible : ' + str(exc))
+
+    modele = 'h1' if saisie['nature'] == 'M' else 'h2'
+    st.download_button(
+        f'Télécharger le {modele.upper()} prérempli',
+        data=creer_cerfa(modele, saisie),
+        file_name=f'declaration-{modele}.pdf',
+        mime='application/pdf',
+        on_click='ignore',
+    )
+    st.caption('Ouvrez le PDF dans un lecteur compatible avec les formulaires. Vérifiez les champs préremplis, complétez les autres rubriques déclaratives, puis enregistrez et signez le document.')
 
     r = st.session_state.get('hab_resultat')
     if r and (not saisie.get('categorie') or r.get('categorie') != saisie.get('categorie') or any(('detail_terrasse' not in t.get('surfaces', {}) or 'detail_surface_nette' not in t.get('surfaces', {})) for t in r.get('tarifs', []))):

@@ -120,6 +120,9 @@ class RechercheParcelleUI(unittest.TestCase):
             self.assertFalse(at.exception, [str(x.value) for x in at.exception])
             self.assertEqual(at.session_state['_calcul_express']['bien']['code_insee'], '42005')
             self.assertEqual(at.session_state['_calcul_express']['bien']['numero'], '0242')
+            telechargements = [bouton.proto.label for bouton in at.get('download_button')]
+            self.assertIn('Télécharger le 6660-REV prérempli', telechargements)
+            self.assertIn('Télécharger mon estimation en PDF', telechargements)
             geo.assert_not_called()
 
     def test_professionnel_prefixes_distincts_exigent_selection(self):

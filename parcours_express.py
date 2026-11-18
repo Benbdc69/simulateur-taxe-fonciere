@@ -19,6 +19,7 @@ from moteur import (COEFF_SURFACES, TAXES, insee_cadastral_adresse,
 from historique_taux import resoudre_tout
 from mise_a_jour_simple import synchroniser_dgfip, synchroniser_taux
 from export_pdf import creer_pdf_estimation
+from export_cerfa import creer_cerfa
 from exoneration_neuf import exon_neuf_non_habitation
 from planchonnement_saisie import preparer_planchonnement, valider_corrections
 
@@ -147,7 +148,7 @@ def finaliser(candidat, categorie, surfaces, annee, construction_nouvelle=False,
         res=calculer_dossier(lire_ref(),json.loads(BASE.read_text(encoding='utf-8')),
              bien,categorie,surfaces,annee,construction_nouvelle,annee_achevement,historique,corrections_planchonnement)
     st.session_state['_calcul_express']={
-        'bien':bien,'adresse':adresse_result['libelle'],
+        'bien':bien,'adresse':adresse_result['libelle'], 'adresse_declaree':adresse_result,
         'categorie':categorie,'annee':annee, 'construction_nouvelle':construction_nouvelle, 'annee_achevement':annee_achevement,
         'historique':historique,
         'surfaces':surfaces,'analyse':res,'sync_incidents':issues}
@@ -401,6 +402,14 @@ if calcule:
         use_container_width=True,
         key='export_pdf_express',
     )
+    st.download_button(
+        'Télécharger le 6660-REV prérempli',
+        data=creer_cerfa('6660-rev', calcule),
+        file_name='declaration-6660-rev.pdf',
+        mime='application/pdf',
+        on_click='ignore',
+    )
+    st.caption('Ouvrez le PDF dans un lecteur compatible avec les formulaires. Vérifiez les champs préremplis, complétez les autres rubriques déclaratives, puis enregistrez et signez le document.')
     with st.expander('Voir les paramètres utilisés et les sources'):
         st.write({'Commune':calcule['bien']['commune'],'Code cadastral':calcule['bien']['code_insee'],
                   'Parcelle':calcule['bien']['section']+' '+calcule['bien']['numero'],

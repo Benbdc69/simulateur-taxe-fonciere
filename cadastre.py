@@ -66,6 +66,8 @@ def adresses(query):
                 insee_cadastral = '6938' + postcode[-1]
             out.append({'libelle': p.get('label') or p.get('name') or q,
                         'commune': p.get('city') or p.get('municipality') or '',
+                        'voie': p.get('street') or (p.get('name') if p.get('type') in ('street', 'locality') else '') or '',
+                        'numero_voirie': p.get('housenumber') or '',
                         'insee': insee_cadastral,
                         'code_insee_adresse': citycode,
                         'code_postal': postcode,
