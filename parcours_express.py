@@ -23,6 +23,7 @@ from saisie_declaration import afficher_declaration
 from frais_gestion import afficher_frais
 from montants import euro_arrondi
 from mesure_cadastrale import afficher_mesures
+from orientation_ape import categories_suggerees
 from exoneration_neuf import exon_neuf_non_habitation
 from planchonnement_saisie import preparer_planchonnement, valider_corrections
 
@@ -168,7 +169,22 @@ with st.container(border=True):
     else:
         automatique, selection_commune = saisir_commune(cle_calcul('express_ref'))
         reference = saisir_reference(cle_calcul('express_ref'), automatique=automatique, selection=selection_commune)
-    categorie=st.selectbox('Catégorie du local', cat_codes,key=cle_calcul('express_categorie'),
+    ape = st.text_input('Code APE de l’exploitant (facultatif)', placeholder='Par exemple 47.11D',
+                        key=cle_calcul('express_ape'),
+                        help='Pour un local loué par une SCI, utilisez le code de l’entreprise qui exerce son activité dans le local.')
+    pistes = ()
+    if ape.strip():
+        try:
+            pistes = tuple(code for code in categories_suggerees(ape) if code in cat_map)
+        except ValueError as exc:
+            st.caption(str(exc))
+        else:
+            if pistes:
+                st.caption('Catégories à examiner : '+', '.join(pistes)+'. Vérifiez l’usage réel, la surface et les aménagements du local.')
+            else:
+                st.caption('Aucune piste disponible pour ce code. Choisissez la catégorie d’après les caractéristiques du local.')
+    categories = [*pistes, *(code for code in cat_codes if code not in pistes)]
+    categorie=st.selectbox('Catégorie du local', categories,key=cle_calcul('express_categorie'),
         index=None, placeholder='Sélectionnez la catégorie figurant sur votre document',
         format_func=lambda code:f"{code} — {cat_map[code]['description']}",
         help='Reprenez le code fiscal de la déclaration 6660-REV ou de la fiche cadastrale (ex. BUR2). Il décrit la nature et l’utilisation du local ; ce n’est pas un code d’activité NAF.')
