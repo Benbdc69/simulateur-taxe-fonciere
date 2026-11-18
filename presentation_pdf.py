@@ -12,6 +12,8 @@ from reportlab.pdfbase.pdfmetrics import registerFont
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import Paragraph, Spacer, Table, TableStyle
 
+from montants import euro_arrondi
+
 ENCRE = colors.HexColor('#172F44')
 VERT = colors.HexColor('#27675E')
 PALE = colors.HexColor('#ECF5F2')
@@ -54,7 +56,7 @@ def synthese_pdf(annee, nature, adresse, reference, profil, lignes, sous_total, 
          Spacer(1, 9), paragraphe('Taxe foncière', 25, colors.white, True),
          paragraphe(f'{nature}  ·  {annee}', 11, colors.white)],
         [paragraphe(libelle, 9, colors.white, alignement=TA_RIGHT),
-         Spacer(1, 5), paragraphe(montant_pdf(montant) if montant is not None else '—',
+         Spacer(1, 5), paragraphe(euro_arrondi(montant) if montant is not None else '—',
                                   23, colors.white, True, TA_RIGHT)],
     ]], colWidths=[10 * cm, LARGEUR - 10 * cm], hAlign='LEFT')
     bloc.setStyle(TableStyle([
@@ -77,7 +79,7 @@ def synthese_pdf(annee, nature, adresse, reference, profil, lignes, sous_total, 
     tableau.append(['Sous-total des cotisations', '', '', montant_pdf(sous_total)])
     libelle_frais = 'Frais de gestion estimés' if not frais or not frais.get('note') else 'Frais de gestion calculables'
     tableau.append([libelle_frais, '', '', montant_pdf(frais.get('frais') if frais else None)])
-    tableau.append(['Total estimé avec frais', '', '', montant_pdf(total)])
+    tableau.append(['Total estimé avec frais', '', '', euro_arrondi(total) if total is not None else '—'])
     tab = Table(tableau, colWidths=[7.6 * cm, 3.1 * cm, 2.5 * cm, 3.7 * cm], hAlign='LEFT')
     tab.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), VERT), ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),

@@ -21,6 +21,7 @@ from mise_a_jour_simple import synchroniser_dgfip, synchroniser_taux
 from export_pdf import creer_pdf_estimation
 from saisie_declaration import afficher_declaration
 from frais_gestion import afficher_frais
+from montants import euro_arrondi
 from mesure_cadastrale import afficher_mesures
 from exoneration_neuf import exon_neuf_non_habitation
 from planchonnement_saisie import preparer_planchonnement, valider_corrections
@@ -320,13 +321,13 @@ if calcule:
         if result:
             total = frais.get('total') if frais else None
             if total is not None:
-                st.metric('Taxe foncière estimée, frais inclus', euro(total))
+                st.metric('Taxe foncière estimée, frais inclus', euro_arrondi(total))
                 st.caption(f"Cotisations hors frais {euro(result['total_hors_frais'])} · Frais {euro(frais['frais'])}")
             else:
-                st.metric('Taxe foncière estimée hors frais', euro(result['total_estime']))
+                st.metric('Taxe foncière estimée hors frais', euro_arrondi(result['total_estime']))
         else:
             if partial['valeur_locative_brute'] is not None:
-                st.metric('Valeur locative brute estimée', euro(partial['valeur_locative_brute']))
+                st.metric('Valeur locative brute estimée', euro_arrondi(partial['valeur_locative_brute']))
             st.warning('Cotisations indisponibles. Données manquantes : '+', '.join(analyse['missing']))
         planch = analyse.get('planchonnement', {})
         if planch.get('reserve'):

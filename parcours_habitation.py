@@ -21,6 +21,7 @@ from dossier_habitation import code_adresse, calculer_scenarios, H2_PIECES
 from export_habitation_pdf import generer_pdf_habitation
 from saisie_declaration import afficher_declaration
 from frais_gestion import afficher_frais
+from montants import euro_arrondi
 
 ROOT = Path(__file__).resolve().parent
 
@@ -403,10 +404,6 @@ else:
                 st.warning(reserve)
             for incident in r['incidents']:
                 st.warning(incident)
-            if not r.get('categorie_confirmee'):
-                st.warning(f"Catégorie {r['categorie']} choisie à titre indicatif avec l’aide au classement : à confirmer sur la fiche d’évaluation cadastrale.")
-            if 'pieces_chauffage_scenario' in x:
-                st.info(f"Chauffage pris en compte : {x['pieces_chauffage_scenario']} × 2 m² = +{2*x['pieces_chauffage_scenario']} m² d’équivalence de surface. Cette majoration s’ajoute à la surface nette avant application du tarif cadastral. Le nombre de pièces chauffées est celui que vous avez saisi, sans déduction automatique.")
             sp = x['surfaces']
             if sp.get('terrasse_ponderee', 0) or r.get('terrasse_reelle', 0):
                 t = sp['detail_terrasse']
@@ -419,10 +416,6 @@ else:
             anciens = [f"{LIBELLES[k]} ({v['annee_source']})" for k, v in r['taux'].items() if v and v['annee_source'] < r['annee']]
             if anciens:
                 st.warning('Taux antérieurs repris à titre indicatif : ' + ', '.join(anciens) + '.')
-            if r['taux'].get('teom') and not r['taux']['teom'].get('zonage_confirme'):
-                st.warning('Le zonage TEOM n’est pas confirmé pour cette adresse : la cotisation correspondante reste à vérifier.')
-            if sp['nature'] == 'A':
-                st.caption(f"Ascenseur de l’immeuble : {'oui' if sp['detail_correctifs']['ascenseur_immeuble'] else 'non'} · Niveau retenu : {sp['detail_correctifs']['niveau_local']} · Correctif article 324 S : {sp['correctif_ascenseur']:+.2f}, appliqué à la partie principale uniquement.")
             st.markdown('#### Étapes du calcul')
             st.write(f"1. Surface comparative : **{sp['comparative']} m²**, issue du barème de catégorie {x['categorie']}.")
             net = sp['detail_surface_nette']
@@ -467,15 +460,15 @@ else:
                 total = frais.get('total') if frais else None
                 cotisations = x.get('total_bien', x['total'])
                 if total is not None:
-                    carte_habitation('Cotisations annuelles estimées, frais inclus', fmt(total),
+                    carte_habitation('Cotisations annuelles estimées, frais inclus', euro_arrondi(total),
                                      f"{perimetre_frais.capitalize()} · Dont frais : {fmt(frais['frais'])}", principale=True)
                 else:
-                    carte_habitation('Cotisations annuelles estimées hors frais', fmt(cotisations),
+                    carte_habitation('Cotisations annuelles estimées hors frais', euro_arrondi(cotisations),
                                      perimetre_frais.capitalize(), principale=True)
                 if not r.get('dependances_completes', True):
                     st.caption('Certaines dépendances évaluées distinctement restent hors estimation.')
             else:
-                carte_habitation('Valeur locative estimée', fmt(x['vl_annee']),
+                carte_habitation('Valeur locative estimée', euro_arrondi(x['vl_annee']),
                                  'Cotisations indisponibles : certains taux sont manquants.', principale=True)
         dossier_pdf = {**r, 'categorie': x['categorie'], 'surfaces': sp, 'tarifs': scenarios,
                        'frais': frais, 'perimetre_frais': perimetre_frais}
