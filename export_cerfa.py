@@ -224,7 +224,7 @@ def preparer_pdf(modele):
     return writer
 
 
-def creer_cerfa(modele, dossier):
+def creer_cerfa(modele, dossier, complements=None):
     writer = preparer_pdf(modele)
     if modele == '6660-rev':
         champs = champs_professionnel(dossier)
@@ -235,6 +235,7 @@ def creer_cerfa(modele, dossier):
         exporter_dependances = dependances_h1 if modele == 'h1' else dependances_h2
         excedent = exporter_dependances(champs, dependances)
 
+    champs.update(complements or {})
     valeurs = {nom: str(valeur) for nom, valeur in champs.items() if valeur is not None and valeur != ''}
     for page in writer.pages:
         if page.get('/Annots'):

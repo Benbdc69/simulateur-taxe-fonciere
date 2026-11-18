@@ -83,6 +83,8 @@ class ParcoursGuidesUI(unittest.TestCase):
             champ(at.button, 'Calculer mon estimation').click().run()
             self.assertFalse(at.exception, [str(x.value) for x in at.exception])
             self.assertEqual(len(at.session_state['hab_resultat']['tarifs']), 2)
+            self.assertIn('Télécharger le H2 prérempli',
+                          [bouton.proto.label for bouton in at.get('download_button')])
             self.assertEqual(at.session_state['hab_resultat']['tarifs'][0]['surfaces']['correctif_ascenseur'], .05)
             self.assertTrue(any('Correctif article 324 S : +0.05' in x.value for x in at.caption))
             self.assertTrue(any('à confirmer' in x.value for x in at.warning))

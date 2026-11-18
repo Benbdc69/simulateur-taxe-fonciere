@@ -19,7 +19,7 @@ from moteur import (COEFF_SURFACES, TAXES, insee_cadastral_adresse,
 from historique_taux import resoudre_tout
 from mise_a_jour_simple import synchroniser_dgfip, synchroniser_taux
 from export_pdf import creer_pdf_estimation
-from export_cerfa import creer_cerfa
+from saisie_declaration import afficher_declaration
 from exoneration_neuf import exon_neuf_non_habitation
 from planchonnement_saisie import preparer_planchonnement, valider_corrections
 
@@ -402,14 +402,7 @@ if calcule:
         use_container_width=True,
         key='export_pdf_express',
     )
-    st.download_button(
-        'Télécharger le 6660-REV prérempli',
-        data=creer_cerfa('6660-rev', calcule),
-        file_name='declaration-6660-rev.pdf',
-        mime='application/pdf',
-        on_click='ignore',
-    )
-    st.caption('Ouvrez le PDF dans un lecteur compatible avec les formulaires. Vérifiez les champs préremplis, complétez les autres rubriques déclaratives, puis enregistrez et signez le document.')
+    afficher_declaration('6660-rev', calcule)
     with st.expander('Voir les paramètres utilisés et les sources'):
         st.write({'Commune':calcule['bien']['commune'],'Code cadastral':calcule['bien']['code_insee'],
                   'Parcelle':calcule['bien']['section']+' '+calcule['bien']['numero'],

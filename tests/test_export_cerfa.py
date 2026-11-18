@@ -2,6 +2,7 @@
 from io import BytesIO
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 from pypdf import PdfReader, PdfWriter
 from streamlit.testing.v1 import AppTest
@@ -86,7 +87,7 @@ class ExportCerfaTests(unittest.TestCase):
         self.assertEqual([ref['/AS'] for ref in pdf.pages[2]['/Annots']
                           if ref.get('/AS') and ref['/AS'] != '/Off'], ['/24'])
 
-    def test_choix_du_modele_dans_le_parcours_habitation(self):
+    def test_pas_de_declaration_avant_estimation_habitation(self):
         for nature, modele in (('M', 'H1'), ('A', 'H2')):
             with self.subTest(nature=nature):
                 app = AppTest.from_file(str(RACINE / 'parcours_habitation.py'))
@@ -101,5 +102,35 @@ class ExportCerfaTests(unittest.TestCase):
                 }
                 app.run()
                 self.assertFalse(app.exception, [x.value for x in app.exception])
+                self.assertFalse(app.get('download_button'))
+
+    def test_complements_saisis_en_interface_et_exportes(self):
+        professionnel = {'bien': {'code_insee': '69387'}, 'adresse': ADRESSE['libelle'],
+                         'adresse_declaree': ADRESSE, 'categorie': 'BUR2', 'surfaces': {'P1': 80}}
+        cas = (
+            ('h1', SITUATION, 'Nom de naissance ou dénomination sociale', 'a7'),
+            ('h2', SITUATION, 'Nom de naissance ou dénomination sociale', 'a9'),
+            ('6660-rev', professionnel, 'Nom', 'a26'),
+        )
+        for modele, dossier, libelle_nom, champ_nom in cas:
+            with self.subTest(modele=modele):
+                app = AppTest.from_string(
+                    'import streamlit as st\n'
+                    'from saisie_declaration import afficher_declaration\n'
+                    'afficher_declaration(st.session_state.modele, st.session_state.dossier)\n'
+                )
+                app.session_state['modele'] = modele
+                app.session_state['dossier'] = dossier
+                app.run()
+                self.assertFalse(app.exception)
+                nom = next(w for w in app.text_input if w.label == libelle_nom)
+                nom.input('DUPONT')
+                with patch('saisie_declaration.creer_cerfa', wraps=creer_cerfa) as exporter:
+                    next(w for w in app.button if w.label == 'Enregistrer les compléments').click().run()
+                self.assertFalse(app.exception)
+                self.assertTrue(app.success)
+                complements = exporter.call_args.args[2]
+                pdf = PdfReader(BytesIO(creer_cerfa(modele, dossier, complements)))
+                self.verifier_champs(pdf, {champ_nom: 'DUPONT', 'a2': 'Lyon 7ème'})
                 self.assertEqual([bouton.proto.label for bouton in app.get('download_button')],
-                                 [f'Télécharger le {modele} prérempli'])
+                                 [f'Télécharger le {modele.upper()} prérempli'])
