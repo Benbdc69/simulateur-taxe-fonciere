@@ -84,6 +84,7 @@ if etape == 1:
     if chercher:
         saisie.update(mode_recherche=mode_recherche, reference=reference, recherche=adresse.strip(), adresse_suggestion=adresse_selectionnee, nature='M' if nature.startswith('Maison') else 'A', annee=int(annee))
         st.session_state.pop('hab_adresses', None)
+        st.session_state.pop(cle_calcul('hab_adresse_choix'), None)
         saisie.pop('adresse', None)
         if mode_recherche == 'Adresse' and len(adresse.strip()) < 6:
             st.error('Renseignez une adresse complète avec le numéro, la voie et la commune.')
@@ -97,13 +98,22 @@ if etape == 1:
                 st.error('Recherche du bien indisponible : ' + str(exc))
     options = st.session_state.get('hab_adresses', [])
     # Un ancien résultat de recherche ne valide jamais une nouvelle saisie.
-    recherche_actuelle = (mode_recherche, reference, adresse.strip(), adresse_selectionnee, 'M' if nature.startswith('Maison') else 'A', int(annee))
-    recherche_sauvee = (saisie.get('mode_recherche', 'Adresse'), saisie.get('reference', {}), saisie.get('recherche'), saisie.get('adresse_suggestion'), saisie.get('nature'), saisie.get('annee'))
+    recherche_actuelle = (mode_recherche, reference, adresse.strip(), adresse_selectionnee)
+    recherche_sauvee = (saisie.get('mode_recherche', 'Adresse'), saisie.get('reference', {}), saisie.get('recherche'), saisie.get('adresse_suggestion'))
     if options and recherche_actuelle == recherche_sauvee:
-        choix = st.selectbox('Confirmez l’adresse du logement' if mode_recherche == 'Adresse' else 'Confirmez la parcelle du logement', range(len(options)), index=0 if adresse_selectionnee is not None else None,
-            placeholder='Sélectionnez le bien exact', format_func=lambda i: options[i]['libelle'],
-            key='hab_adresse_choix', help='Vérifiez la commune et l’arrondissement. La recherche peut proposer plusieurs adresses ; aucune n’est choisie automatiquement.')
+        parcelle_unique = mode_recherche == 'Parcelle cadastrale' and len(options) == 1
+        if parcelle_unique:
+            choix = 0
+            st.caption(f"Parcelle identifiée · {options[0]['libelle']}")
+        else:
+            choix = st.selectbox(
+                'Confirmez l’adresse du logement' if mode_recherche == 'Adresse' else 'Confirmez la parcelle du logement',
+                range(len(options)), index=0 if adresse_selectionnee is not None else None,
+                placeholder='Sélectionnez le bien exact', format_func=lambda i: options[i]['libelle'],
+                key=cle_calcul('hab_adresse_choix'),
+            )
         if st.button('Continuer vers les surfaces', type='primary', disabled=choix is None):
+            saisie.update(nature='M' if nature.startswith('Maison') else 'A', annee=int(annee))
             saisie['adresse'] = options[choix]
             saisie['parcelle'] = options[choix].get('parcelle')
             aller(2)

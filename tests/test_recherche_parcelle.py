@@ -90,10 +90,13 @@ class RechercheParcelleUI(unittest.TestCase):
             self.remplir(at)
             champ(at.button, 'Rechercher cette parcelle').click().run()
             self.assertFalse(at.exception)
-            self.assertTrue(champ(at.button, 'Continuer vers les surfaces').disabled)
-            champ(at.selectbox, 'Confirmez la parcelle du logement').select(0).run()
+            self.assertFalse(champ(at.button, 'Continuer vers les surfaces').disabled)
+            self.assertTrue(any('Parcelle identifiée' in c.value for c in at.caption))
+            champ(at.radio, 'Type de logement').set_value('Maison (H1)').run()
+            self.assertFalse(champ(at.button, 'Continuer vers les surfaces').disabled)
             champ(at.button, 'Continuer vers les surfaces').click().run()
             self.assertEqual(at.session_state['hab_etape'], 2)
+            self.assertEqual(at.session_state['hab_saisie']['nature'], 'M')
             self.assertEqual(at.session_state['hab_saisie']['adresse']['insee'], '42005')
             self.assertEqual(at.session_state['hab_saisie']['parcelle']['section'], 'BI')
             champ(at.button, 'Retour au logement').click().run()
@@ -102,6 +105,18 @@ class RechercheParcelleUI(unittest.TestCase):
             self.assertNotIn('Continuer vers les surfaces', [x.label for x in at.button])
             api.assert_called_once()
             geo.assert_not_called()
+
+    def test_habitation_plusieurs_prefixes_exigent_une_selection(self):
+        with patch('recherche_bien.rechercher_parcelle', return_value=[ROW, {**ROW, 'com_abs': '123'}]):
+            at = AppTest.from_file(str(ROOT / 'parcours_habitation.py')).run()
+            champ(at.radio, 'Rechercher le bien par').set_value('Parcelle cadastrale').run()
+            self.remplir(at)
+            champ(at.text_input, 'Préfixe cadastral (facultatif)').input('')
+            champ(at.button, 'Rechercher cette parcelle').click().run()
+            self.assertTrue(champ(at.button, 'Continuer vers les surfaces').disabled)
+            champ(at.selectbox, 'Confirmez la parcelle du logement').select(1).run()
+            champ(at.button, 'Continuer vers les surfaces').click().run()
+            self.assertEqual(at.session_state['hab_saisie']['parcelle']['prefixe'], '123')
 
     def test_professionnel_confirmation_obligatoire_et_calcul(self):
         with patch.dict(os.environ, {'TF_LOCAL_MODE': '1'}), patch('recherche_bien.rechercher_parcelle', return_value=[ROW]), \
