@@ -4,6 +4,7 @@ from decimal import Decimal, ROUND_HALF_UP
 import streamlit as st
 
 from montants import euro_arrondi
+from neutralisation_cfe import rechercher_neutralisation_cfe
 from session_calcul import cle_calcul
 from taux_composantes import DGCL_PAGE, rechercher_dgcl
 
@@ -12,9 +13,10 @@ PARTS = {'commune': 'commune', 'epci': 'intercommunalité'}
 
 def taux_cfe_public(code_insee, annee):
     taux = rechercher_dgcl(code_insee, annee, taxe='CFE')['taux']
-    if not all(k in taux and 0 <= taux[k] <= 100 for k in PARTS):
-        raise ValueError('Les deux parts du taux voté doivent être documentées, y compris celles à taux nul.')
-    return {k: taux[k] for k in PARTS}
+    utiles = {k: taux[k] for k in PARTS if k in taux and 0 <= taux[k] <= 100}
+    if not utiles:
+        raise ValueError('Aucune part du taux voté n’est documentée.')
+    return utiles
 
 
 def afficher_cfe(code_insee, annee, valeur_locative=None):
@@ -38,6 +40,16 @@ def afficher_cfe(code_insee, annee, valeur_locative=None):
                 vl = st.number_input('Valeur locative brute applicable à la CFE (€)', min_value=0.0,
                                      value=None, step=1.0, key=prefixe + '_vl',
                                      help='Valeur avant abattement de taxe foncière et avant neutralisation.')
+            cle_neutralisation = prefixe + '_publication_neutralisation'
+            if st.button('Rechercher les coefficients CFE (DGFiP)', key=prefixe + '_chercher_neutralisation'):
+                try:
+                    with st.spinner('Recherche de la neutralisation CFE…'):
+                        publies, source = rechercher_neutralisation_cfe(code_insee, annee)
+                    st.session_state[cle_neutralisation] = publies, source
+                    for part, coefficient in publies.items():
+                        st.session_state[f'{prefixe}_neutralisation_{part}'] = coefficient
+                except ValueError:
+                    st.info('Aucun coefficient CFE n’a pu être récupéré. Vérifiez la publication DGFiP ou renseignez les coefficients documentés.')
             coefficients = {
                 cle: st.number_input(f'Coefficient de neutralisation CFE · {libelle}', min_value=0.0,
                                      value=None, step=0.01, format='%.6f', key=f'{prefixe}_neutralisation_{cle}',
@@ -45,6 +57,12 @@ def afficher_cfe(code_insee, annee, valeur_locative=None):
                                           'Saisissez 1 si vous avez confirmé qu’aucune neutralisation ne s’applique.')
                 for cle, libelle in PARTS.items()
             }
+            publication = st.session_state.get(cle_neutralisation)
+            if publication:
+                publies, source = publication
+                parts = [PARTS[k] for k, coefficient in publies.items() if coefficients[k] == coefficient]
+                if parts:
+                    st.caption('Coefficient publié utilisé pour '+', '.join(parts)+f'. [Source DGFiP]({source})')
             bases = {
                 cle: (Decimal(str(vl)) * Decimal(str(coefficient))).quantize(Decimal('1'), rounding=ROUND_HALF_UP)
                 if vl is not None and coefficient is not None and coefficient > 0 else None
@@ -69,12 +87,14 @@ def afficher_cfe(code_insee, annee, valeur_locative=None):
                 for cle, taux in public.items():
                     st.session_state[f'{prefixe}_taux_{cle}'] = taux
             except ValueError:
-                st.info('Taux votés complets indisponibles pour ce millésime. Reprenez les taux de votre avis de CFE.')
+                st.info('Aucun taux voté récupéré pour ce millésime. Reprenez les taux de votre avis de CFE.')
         taux = {cle: st.number_input(f'Taux CFE · {libelle} (%)', min_value=0.0, max_value=100.0,
                                      value=None, step=0.01, format='%.4f', key=f'{prefixe}_taux_{cle}')
                 for cle, libelle in PARTS.items()}
-        if taux == st.session_state.get(cle_public):
-            st.caption(f'Taux votés pour {annee}, à vérifier sur l’avis. [Source DGCL]({DGCL_PAGE})')
+        publies = st.session_state.get(cle_public, {})
+        parts = [PARTS[k] for k, valeur in publies.items() if taux[k] == valeur]
+        if parts:
+            st.caption(f'Taux voté récupéré pour {", ".join(parts)} en {annee}. Vérifiez les parts sur l’avis. [Source DGCL]({DGCL_PAGE})')
         else:
             st.caption(f'[Consulter les taux votés publiés par la DGCL]({DGCL_PAGE})')
         st.caption('Saisissez 0 si l’avis confirme une part à taux nul. La cotisation estimée couvre les parts '
