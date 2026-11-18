@@ -65,7 +65,18 @@ def saisir_dependances(valeurs, annee, maison=False):
                 st.caption('Une ligne décrit une dépendance. Les surfaces de ses composantes sont séparées ; les éléments de pur agrément relèvent d’une évaluation distincte.')
                 st.markdown('**52 · Équipement de la dépendance**')
             if ligne['mode'] == 'incorporee' and not maison:
-                ligne['coefficient'] = st.number_input('Coefficient de pondération', min_value=.2, max_value=.6, value=float(ligne.get('coefficient', .4)), step=.05, key=cle+'_coefficient', help='Reprenez le coefficient de la fiche cadastrale. La valeur initiale 0,4 est une hypothèse à confirmer.')
+                aide = 'Reprenez le coefficient de la fiche cadastrale. La valeur initiale 0,4 est une hypothèse à confirmer.'
+                if ligne['type'] == 'cave':
+                    aide += (
+                        '\n\nRepères indicatifs pour une cave :\n\n'
+                        '- **0,2** — Cave ordinaire de faible valeur d’usage.\n'
+                        '- **0,4** — Cave présentant une valeur d’usage importante.\n'
+                        '- **0,5** — Cave particulièrement valorisable.'
+                    )
+                ligne['coefficient'] = st.number_input(
+                    'Coefficient de pondération', min_value=.2, max_value=.6,
+                    value=float(ligne.get('coefficient', .4)), step=.05, key=cle+'_coefficient', help=aide,
+                )
                 st.caption('La surface pondérée rejoint le groupe des éléments secondaires, corrigé et arrondi séparément, sans correctif d’ascenseur ; le même tarif est ensuite appliqué. Ne comptez pas deux fois les mêmes équipements.')
             if ligne['mode'] == 'distincte':
                 if ligne.get('annee_base') != annee:
