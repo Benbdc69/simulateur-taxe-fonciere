@@ -20,6 +20,7 @@ from historique_taux import resoudre_tout
 from mise_a_jour_simple import synchroniser_dgfip, synchroniser_taux
 from export_pdf import creer_pdf_estimation
 from saisie_declaration import afficher_declaration
+from mesure_cadastrale import afficher_mesures
 from exoneration_neuf import exon_neuf_non_habitation
 from planchonnement_saisie import preparer_planchonnement, valider_corrections
 
@@ -206,6 +207,7 @@ with st.container(border=True):
         help='Reprenez le code fiscal de la déclaration 6660-REV ou de la fiche cadastrale (ex. BUR2). Il décrit la nature et l’utilisation du local ; ce n’est pas un code d’activité NAF.')
     st.caption('Catégorie inconnue ? Demandez la fiche d’évaluation au service des impôts fonciers. Choisir une catégorie au hasard peut modifier fortement le tarif.')
     st.markdown('#### 2 · Répartir les surfaces')
+    afficher_mesures(mode_recherche, reference, adresse, adresse_selectionnee)
     st.caption('Chaque surface doit apparaître une seule fois. Ne saisissez pas une surface déjà pondérée. Laissez 0 pour les rubriques qui ne concernent pas votre bien.')
     aides_surfaces={
         'P1':'Surface des parties principales utilisées pour l’activité. Reprenez la rubrique P1 de la déclaration, sans y ajouter les surfaces P2, P3 ou les parkings.',

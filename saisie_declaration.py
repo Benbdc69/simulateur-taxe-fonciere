@@ -71,6 +71,12 @@ PROFESSIONNEL = (
 
 
 def afficher_declaration(modele, dossier):
+    if st.button(f'Télécharger le {modele.upper()}', key=cle_calcul(f'ouvrir_declaration_{modele}')):
+        completer_declaration(modele, dossier)
+
+
+@st.dialog('Compléter le formulaire avant de le télécharger', width='large')
+def completer_declaration(modele, dossier):
     professionnel = modele == '6660-rev'
     adresse = dossier['adresse'] if professionnel else dossier['adresse']['libelle']
     bien = dossier.get('bien') or dossier.get('parcelle') or {}
@@ -92,7 +98,7 @@ def afficher_declaration(modele, dossier):
     enregistre = {nom: valeur for nom, valeur in enregistre.items() if nom in champs_visibles}
 
     st.subheader(f'Déclaration {modele.upper()}')
-    with st.expander('Compléter les informations du formulaire'):
+    with st.container():
         st.caption('Les champs sont facultatifs dans le simulateur. Enregistrez vos compléments avant de télécharger le formulaire.')
         with st.form(cle + '_saisie'):
             valeurs = {}

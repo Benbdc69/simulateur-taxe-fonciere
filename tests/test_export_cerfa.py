@@ -103,6 +103,7 @@ class ExportCerfaTests(unittest.TestCase):
                 app.run()
                 self.assertFalse(app.exception, [x.value for x in app.exception])
                 self.assertFalse(app.get('download_button'))
+                self.assertNotIn(f'Télécharger le {modele}', [bouton.label for bouton in app.button])
 
     def test_complements_saisis_en_interface_et_exportes(self):
         professionnel = {'bien': {'code_insee': '69387'}, 'adresse': ADRESSE['libelle'],
@@ -116,15 +117,22 @@ class ExportCerfaTests(unittest.TestCase):
             with self.subTest(modele=modele):
                 app = AppTest.from_string(
                     'import streamlit as st\n'
-                    'from saisie_declaration import afficher_declaration\n'
-                    'afficher_declaration(st.session_state.modele, st.session_state.dossier)\n'
+                    'from saisie_declaration import afficher_declaration, completer_declaration\n'
+                    'if st.session_state.get("dialogue_ouvert"):\n'
+                    '    completer_declaration(st.session_state.modele, st.session_state.dossier)\n'
+                    'else:\n'
+                    '    afficher_declaration(st.session_state.modele, st.session_state.dossier)\n'
                 )
                 app.session_state['modele'] = modele
                 app.session_state['dossier'] = dossier
                 app.run()
                 self.assertFalse(app.exception)
-                nom = next(w for w in app.text_input if w.label == libelle_nom)
-                nom.input('DUPONT')
+                self.assertFalse(app.get('download_button'))
+                next(w for w in app.button if w.label == f'Télécharger le {modele.upper()}').click().run()
+                self.assertTrue(app.get('download_button'))
+                # AppTest relance le script complet lors de la soumission.
+                app.session_state['dialogue_ouvert'] = True
+                next(w for w in app.text_input if w.label == libelle_nom).input('DUPONT')
                 with patch('saisie_declaration.creer_cerfa', wraps=creer_cerfa) as exporter:
                     next(w for w in app.button if w.label == 'Enregistrer les compléments').click().run()
                 self.assertFalse(app.exception)

@@ -121,7 +121,7 @@ class RechercheParcelleUI(unittest.TestCase):
             self.assertEqual(at.session_state['_calcul_express']['bien']['code_insee'], '42005')
             self.assertEqual(at.session_state['_calcul_express']['bien']['numero'], '0242')
             telechargements = [bouton.proto.label for bouton in at.get('download_button')]
-            self.assertIn('Télécharger le 6660-REV prérempli', telechargements)
+            self.assertIn('Télécharger le 6660-REV', [bouton.label for bouton in at.button])
             self.assertIn('Télécharger mon estimation en PDF', telechargements)
             geo.assert_not_called()
 

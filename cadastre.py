@@ -156,7 +156,7 @@ def _normaliser_parcelle(feature, adresse, mode, rayon_m):
             'departement':code_insee[:2] or adresse.get('departement',''),
             'section':section, 'numero':numero, 'prefixe':prefixe, 'id':idu,
             'distance_m':dist, 'recherche':'Point dans la parcelle' if mode=='point' else 'Parcelle voisine — confirmation obligatoire',
-            'rayon_recherche_m':0 if mode=='point' else rayon_m}
+            'rayon_recherche_m':0 if mode=='point' else rayon_m, 'geometry':feature.get('geometry')}
 
 
 def parcelles_a_l_adresse(adresse, rayon_m=40):
@@ -200,4 +200,5 @@ def rechercher_parcelle(insee,section,numero,prefixe=None):
             'numero':str(numero).strip().zfill(4), '_limit':25}
     if prefixe is not None and str(prefixe).strip():
         params['com_abs']=str(prefixe).strip().zfill(3)
-    return [f.get('properties',{}) for f in _get_json(CADASTRE,params,18)]
+    return [{**(f.get('properties') or {}), 'geometry': f.get('geometry')}
+            for f in _get_json(CADASTRE, params, 18)]

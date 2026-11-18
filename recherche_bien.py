@@ -158,7 +158,8 @@ def identifier_par_reference(reference):
         commune = str(p.get('nom_com') or p.get('nom_commune') or r['commune'])
         parcelle = dict(insee=code, commune=commune, departement=code[:3] if code.startswith(('97','98')) else code[:2],
                         prefixe=pref, section=sec, numero=num, id=identifiant,
-                        recherche='Référence cadastrale — confirmation obligatoire', distance_m=None)
+                        recherche='Référence cadastrale — confirmation obligatoire', distance_m=None,
+                        geometry=p.get('geometry'))
         resultats.append(dict(libelle=f'Parcelle {pref} {sec} {num} · {commune} ({code})',
                               commune=commune, insee=code, code_postal='', parcelle=parcelle))
     return resultats
