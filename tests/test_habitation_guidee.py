@@ -1,7 +1,9 @@
 """Régressions du dossier habitation et des entrées numériques."""
+from io import BytesIO
 import sys
 import unittest
 from pathlib import Path
+from pypdf import PdfReader
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from dossier_habitation import code_adresse, calculer_scenarios
 from historique_taux import COMPOSANTES, enregistrer
@@ -83,7 +85,12 @@ class HabitationGuideeTests(unittest.TestCase):
         x = r['tarifs'][-1]
         dossier = {**r, 'categorie': x['categorie'], 'surfaces': x['surfaces'],
                    'tarifs': [x], 'serie_selectionnee': 0, 'source_tarifs': SOURCE}
-        self.assertTrue(generer_pdf_habitation(dossier).startswith(b'%PDF'))
+        pages = PdfReader(BytesIO(generer_pdf_habitation(dossier))).pages
+        synthese = pages[0].extract_text()
+        self.assertIn('Ne vaut pas avis d’imposition', synthese)
+        self.assertIn(f"Série {x['serie']}", synthese)
+        self.assertIn('Cotisations par composante', synthese)
+        self.assertIn('Annexe — détail du calcul', pages[1].extract_text())
 
     def test_h2_nombre_chauffe_libre_sans_comptage_automatique(self):
         self.saisie['h2'] = {'pieces': {'reception': 1, 'chambres': 2, 'cuisines_moins_9': 1,

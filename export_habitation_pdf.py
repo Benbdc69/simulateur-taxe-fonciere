@@ -2,13 +2,13 @@
 from io import BytesIO
 from dependances_habitation import MODES
 from referentiel_formulaires import PIECES_HABITATION, SURFACES_DEP_H1
+from presentation_pdf import pied_rapport, synthese_pdf
 from xml.sax.saxutils import escape
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet,ParagraphStyle
-from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.units import cm
-from reportlab.platypus import SimpleDocTemplate,Paragraph,Spacer,Table,TableStyle,KeepTogether,PageBreak
+from reportlab.platypus import SimpleDocTemplate,Paragraph,Spacer,Table,TableStyle,PageBreak
 
 BLUE=colors.HexColor('#164C79');PALE=colors.HexColor('#EDF4F9');LINE=colors.HexColor('#CFDEE9')
 
@@ -23,8 +23,31 @@ def generer_pdf_habitation(d):
     st.add(ParagraphStyle(name='AxHeadH',parent=st['Heading2'],fontSize=11,leading=14,spaceBefore=13,spaceAfter=8,textColor=BLUE))
     st.add(ParagraphStyle(name='AxTinyH',parent=st['Normal'],fontSize=8,leading=11,textColor=colors.HexColor('#50667B')))
     st.add(ParagraphStyle(name='AxNormalH',parent=st['Normal'],fontSize=9,leading=13))
-    story=[Paragraph('Simulation de taxe foncière - Habitation',st['AxTitleH']),
-           Paragraph('Rapport indicatif, non opposable à l’administration fiscale. Source tarifs : DGFiP, fichier 2024.',st['AxTinyH']),Spacer(1,14)]
+    selected=int(d.get('serie_selectionnee',0))
+    chosen=d['tarifs'][min(max(selected,0),len(d['tarifs'])-1)]
+    rates=d.get('taux',{})
+    LIBELLES={'commune':'Commune','syndicat':'Syndicat','epci':'Intercommunalité','taxes_speciales':'Taxes spéciales / TSE','gemapi':'GEMAPI','teom':'TEOM'}
+    frais = d.get('frais')
+    distinctes = d.get('dependances_distinctes', [])
+    bien_complet = bool(distinctes) and 'total_bien' in chosen
+    lignes = [(LIBELLES.get(cle, cle), chosen['base_tf'], (rates.get(cle) or {}).get('taux'), montant)
+              for cle, montant in chosen.get('montants', {}).items()]
+    if bien_complet:
+        lignes.append(('Dépendances évaluées séparément', sum(dep['base_tf'] for dep in distinctes),
+                       None, sum(dep['total'] for dep in distinctes)))
+    parcelle = d.get('parcelle') or {}
+    reference = f"Commune INSEE {d['code_insee']}"
+    if parcelle:
+        reference += f" · Parcelle {parcelle.get('prefixe', '')} {parcelle.get('section', '')} {parcelle.get('numero', '')}"
+    story = synthese_pdf(
+        d['annee'], d['nature'], d['adresse'], reference,
+        f"Catégorie {d['categorie']} · Série {chosen['serie']}" +
+        (f" · Origine {chosen['origine']}" if chosen.get('origine') else ''),
+        lignes, chosen['total_bien'] if bien_complet else chosen.get('total'), frais, chosen.get('vl_annee'),
+        'Le tableau couvre le logement et ses dépendances rattachées. Certaines dépendances distinctes restent hors estimation.'
+        if distinctes and not bien_complet else 'Estimation sous réserve du classement, des taux et du zonage TEOM.',
+    )
+    story.extend([PageBreak(), Paragraph('Annexe — détail du calcul', st['AxTitleH'])])
     fields=[('Adresse',d['adresse']),('Commune (INSEE)',d['code_insee']),('Nature',d['nature']),
             ('Catégorie cadastrale',d['categorie']),('Année d’imposition',d['annee']),
             ('Surface principale déclarée',str(d.get('surface_reelle','?'))+' m²'),
@@ -70,7 +93,6 @@ def generer_pdf_habitation(d):
                       ('Coefficient de conversion global',fac['coefficient_cumule'])]:
         story.append(Paragraph(f'{ph(title)} : <b>{float(val):.6f}</b>',st['AxNormalH']))
     story.append(Paragraph('Valeurs locatives et cotisations estimées',st['AxHeadH']))
-    rates=d.get('taux',{})
     h=Table([[Paragraph('<b>Série</b>',st['AxNormalH']),Paragraph('<b>Tarif 1970/m²</b>',st['AxNormalH']),
               Paragraph('<b>VL 1970</b>',st['AxNormalH']),Paragraph('<b>VL année</b>',st['AxNormalH']),
               Paragraph('<b>Base TFPB</b>',st['AxNormalH']),Paragraph('<b>Sous-total*</b>',st['AxNormalH'])]]+
@@ -82,13 +104,10 @@ def generer_pdf_habitation(d):
                           ('ROWBACKGROUNDS',(0,1),(-1,-1),[colors.white,colors.HexColor('#FAFCFE')]),
                           ('FONTSIZE',(0,1),(-1,-1),7),('BOTTOMPADDING',(0,0),(-1,-1),8),('TOPPADDING',(0,0),(-1,-1),8)]))
     story.append(h)
-    selected=int(d.get('serie_selectionnee',0))
-    chosen=d['tarifs'][min(max(selected,0),len(d['tarifs'])-1)]
     story.append(Spacer(1,12))
     if chosen.get('montants'):
         story.append(Paragraph('Détail du scénario sélectionné : série '+ph(chosen['serie']),st['AxHeadH']))
         detail=[[Paragraph('<b>Composante</b>',st['AxNormalH']),Paragraph('<b>Montant</b>',st['AxNormalH']),Paragraph('<b>Millésime taux</b>',st['AxNormalH'])]]
-        LIBELLES={'commune':'Commune','syndicat':'Syndicat','epci':'Intercommunalité','taxes_speciales':'Taxes spéciales / TSE','gemapi':'GEMAPI','teom':'TEOM'}
         for key,value in chosen['montants'].items():
             obj=rates.get(key) or {}
             detail.append([ph(LIBELLES.get(key,key)),eur(value),str(obj.get('annee_source','—'))])
@@ -136,7 +155,10 @@ def generer_pdf_habitation(d):
             story.append(Paragraph('<b>Total estimé du bien, dépendances distinctes comprises : '+eur(chosen['total_bien'])+'</b> (hors frais et exonérations).',st['AxNormalH']))
     frais = d.get('frais')
     if frais:
-        story.append(Paragraph('Frais de gestion · '+ph(d['perimetre_frais']), st['AxHeadH']))
+        story.append(Paragraph('Frais de gestion · '+ph(d.get('perimetre_frais', '')), st['AxHeadH']))
+        for cle, calcul in frais.get('lignes', {}).items():
+            story.append(Paragraph(f"{ph(LIBELLES.get(cle, cle))} · {calcul['taux']} % · "
+                                   f"{eur(calcul['montant'])}", st['AxNormalH']))
         libelle = 'Frais calculables' if frais['note'] else 'Frais de gestion estimés'
         story.append(Paragraph(f"{libelle} : {eur(frais['frais'])} (CGI, article 1641).", st['AxNormalH']))
         if frais['total'] is not None:
@@ -175,8 +197,7 @@ def generer_pdf_habitation(d):
     # Cela évite une page supplémentaire contenant seulement les sources.
     # Annexe explicative conservée dans le PDF uniquement.
     # Toutes les valeurs fiscales chiffrées proviennent du scénario d'origine.
-    story.append(PageBreak())
-    story.append(Paragraph('Annexe de contrôle - détail du calcul',st['AxTitleH']))
+    story.append(Paragraph('Décomposition du calcul',st['AxHeadH']))
     story.append(Paragraph('Habitation H1/H2 - décomposition des surfaces, de la valeur locative et de la cotisation.',st['AxTinyH']))
     sp=d['surfaces']
     story.append(Paragraph('1. Surface pondérée cadastrale',st['AxHeadH']))
@@ -247,7 +268,7 @@ def generer_pdf_habitation(d):
     story.append(Paragraph('<b>Contrôles :</b> classement et série à confirmer sur la fiche cadastrale ; dépendances éventuellement évaluées à part ; frais, exonérations et dégrèvements particuliers exclus. Montants arrondis pour la lecture.',st['AxTinyH']))
     story.append(Paragraph('Tarifs : '+ph(d.get('source_tarifs','DGFiP open data 2024')),st['AxTinyH']))
     story.append(Paragraph('Coefficients : '+ph(fac.get('source_departement',''))+' ; '+ph(fac.get('source_revalorisation','')),st['AxTinyH']))
-    doc.build(story)
+    doc.build(story, onFirstPage=pied_rapport, onLaterPages=pied_rapport)
     data=out.getvalue()
     if not data.startswith(b'%PDF'):raise RuntimeError('Export PDF habitation invalide')
     return data
