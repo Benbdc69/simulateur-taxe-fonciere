@@ -6,6 +6,7 @@ import streamlit as st
 
 from export_cerfa import champs_habitation, champs_professionnel, creer_cerfa
 from session_calcul import cle_calcul
+from referentiel_formulaires import MURS, TOITURES
 
 
 def textes(premier, libelles, prefixe='a'):
@@ -32,6 +33,10 @@ HABITATION = {
         ('Situation du local', SITUATION + textes(5, ('Numéro de lot', 'Quote-part'))),
         ('Propriétaire ou usufruitier', textes(7, PROPRIETAIRE)),
         ('Achèvement, occupation et financement', textes(16, LOGEMENT)),
+        ('43 A · Matériaux des gros murs', [(f'cac{i}', materiau, '/Oui')
+                                           for i, materiau in enumerate(MURS, 7)]),
+        ('43 B · Matériaux des toitures', [(f'cac{i}', materiau, '/Oui')
+                                          for i, materiau in enumerate(TOITURES, 14)]),
         ('Coordonnées et signature', textes(43, COORDONNEES, 'b')),
     ),
     'h2': (

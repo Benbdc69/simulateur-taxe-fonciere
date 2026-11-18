@@ -65,7 +65,6 @@ class ParcoursGuidesUI(unittest.TestCase):
             champ(at.number_input, 'Chambres et autres pièces habitables').set_value(2)
             champ(at.number_input, 'Cuisines de moins de 9 m²').set_value(1)
             champ(at.checkbox, 'Chauffage ou climatisation dans les DOM').check()
-            champ(at.number_input, 'Nombre de pièces chauffées').set_value(2)
             champ(at.number_input, 'Niveau du logement pour le correctif d’ascenseur').set_value(4)
             champ(at.checkbox, 'Ascenseur de l’immeuble desservant l’étage du logement').check()
             champ(at.number_input, 'Surface totale des pièces et annexes affectées à l’habitation (m²)').set_value(45.)
@@ -90,7 +89,7 @@ class ParcoursGuidesUI(unittest.TestCase):
             self.assertFalse(any('Le zonage TEOM n’est pas confirmé' in x.value for x in at.warning))
             self.assertTrue(any('évaluation distincte non chiffrée' in x.value for x in at.warning))
             self.assertNotIn('Hypothèse de chauffage à examiner', [x.label for x in at.selectbox])
-            self.assertFalse(any('Chauffage pris en compte' in x.value for x in at.info))
+            self.assertTrue(any('Majoration chauffage : 4 × 2 m² = +8 m²' in x.value for x in at.markdown))
             champ(at.selectbox, 'Scénario à examiner').select(1).run()
             self.assertFalse(at.exception)
             self.assertEqual(at.session_state['hab_resultat']['tarifs'][1]['categorie'], '5')
@@ -100,7 +99,7 @@ class ParcoursGuidesUI(unittest.TestCase):
             self.assertTrue(any('Cotisations annuelles estimées' in x.value for x in at.markdown))
             self.assertTrue(any('Fourchette des séries — catégorie 5' in x.value for x in at.markdown))
             self.assertEqual(len(champ(at.selectbox, 'Scénario à examiner').options), 2)
-            comparables = [x for x in at.session_state['hab_resultat']['tarifs'] if x['pieces_chauffage_scenario'] == 2]
+            comparables = [x for x in at.session_state['hab_resultat']['tarifs'] if x['pieces_chauffage_scenario'] == 4]
             euro = lambda n: f'{n:,.2f}'.replace(',', ' ').replace('.', ',') + ' €'
             fourchette = next(x.value for x in at.markdown if 'Fourchette des séries — catégorie 5' in x.value)
             self.assertIn(euro(min(x['total'] for x in comparables)), fourchette)
@@ -109,7 +108,7 @@ class ParcoursGuidesUI(unittest.TestCase):
             self.assertIn('Intercommunalité', list(taxes['Taxe']))
             self.assertFalse(details.proto.expanded)
             self.assertEqual(at.session_state['hab_resultat']['h2']['pieces']['chambres'], 2)
-            self.assertEqual(at.session_state['hab_resultat']['tarifs'][1]['pieces_chauffage_scenario'], 2)
+            self.assertEqual(at.session_state['hab_resultat']['tarifs'][1]['pieces_chauffage_scenario'], 4)
             sync.assert_not_called()
             tarifs.assert_called_once()
             champ(at.button, 'Modifier mes informations').click().run()
@@ -118,7 +117,7 @@ class ParcoursGuidesUI(unittest.TestCase):
             self.assertEqual(champ(at.number_input, 'Surface de la dépendance (m²)').value, 12.)
             self.assertEqual(champ(at.number_input, 'Chambres et autres pièces habitables').value, 2)
             self.assertTrue(champ(at.checkbox, 'Chauffage ou climatisation dans les DOM').value)
-            self.assertEqual(champ(at.number_input, 'Nombre de pièces chauffées').value, 2)
+            self.assertNotIn('Nombre de pièces chauffées', [x.label for x in at.number_input])
             self.assertEqual(champ(at.number_input, 'Niveau du logement pour le correctif d’ascenseur').value, 4)
             self.assertTrue(champ(at.checkbox, 'Ascenseur de l’immeuble desservant l’étage du logement').value)
 

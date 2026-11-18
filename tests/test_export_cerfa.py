@@ -133,6 +133,9 @@ class ExportCerfaTests(unittest.TestCase):
                 # AppTest relance le script complet lors de la soumission.
                 app.session_state['dialogue_ouvert'] = True
                 next(w for w in app.text_input if w.label == libelle_nom).input('DUPONT')
+                if modele == 'h1':
+                    next(w for w in app.checkbox if w.label == 'Pierre').check()
+                    next(w for w in app.checkbox if w.label == 'Tuiles').check()
                 with patch('saisie_declaration.creer_cerfa', wraps=creer_cerfa) as exporter:
                     next(w for w in app.button if w.label == 'Enregistrer les compléments').click().run()
                 self.assertFalse(app.exception)
@@ -140,5 +143,7 @@ class ExportCerfaTests(unittest.TestCase):
                 complements = exporter.call_args.args[2]
                 pdf = PdfReader(BytesIO(creer_cerfa(modele, dossier, complements)))
                 self.verifier_champs(pdf, {champ_nom: 'DUPONT', 'a2': 'Lyon 7ème'})
+                if modele == 'h1':
+                    self.verifier_champs(pdf, {'cac7': '/Oui', 'cac14': '/Oui'})
                 self.assertEqual([bouton.proto.label for bouton in app.get('download_button')],
                                  [f'Télécharger le {modele.upper()} prérempli'])

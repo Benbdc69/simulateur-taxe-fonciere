@@ -3,35 +3,23 @@ from moteur_habitation import CATEGORIES, surface_totale, simulations_tarifs
 from facteurs_habitation import facteur_departement_annee
 from historique_taux import COMPOSANTES, resoudre_tout
 from tarifs_habitation import rechercher_tarifs
-from math import isfinite
 from formulaire_h1 import valider_description_h1
-from dependances_habitation import valider_dependances, evaluer_distinctes
+from dependances_habitation import valider_dependances, evaluer_distinctes, nombre
 
 from referentiel_formulaires import PIECES_HABITATION as H2_PIECES
 
 
-def hypotheses_chauffage_h2(h2):
-    """Conserve le nombre librement déclaré, sans le déduire de la consistance."""
-    pieces = h2.get('pieces', {})
+def compter_pieces_chauffees(description, modele):
+    pieces = description.get('pieces', {})
     if set(pieces) - set(H2_PIECES):
-        raise ValueError('Rubrique de consistance H2 inconnue.')
-    total = 0
-    for value in pieces.values():
-        n = float(value)
-        if isinstance(value, bool) or not isfinite(n) or n < 0 or not n.is_integer():
-            raise ValueError('Les nombres de pièces H2 doivent être des entiers positifs ou nuls.')
-        total += int(n)
-    if not total:
-        raise ValueError('Renseignez au moins une pièce dans le cadre 41 du H2.')
-    nombre = h2.get('pieces_chauffees')
-    if nombre is None and h2.get('chauffage'):
-        raise ValueError('Renseignez le nombre de pièces chauffées.')
-    n = float(nombre or 0)
-    if isinstance(nombre, bool) or not isfinite(n) or n < 0 or not n.is_integer():
-        raise ValueError('Le nombre de pièces chauffées doit être un entier positif ou nul.')
-    if not h2.get('chauffage') and n:
-        raise ValueError('Cochez le chauffage ou indiquez zéro pièce chauffée.')
-    return [int(n)]
+        raise ValueError(f'Rubrique de consistance {modele} inconnue.')
+    quantites = {cle: nombre(valeur, f'Nombre de pièces {modele}', entier=True)
+                 for cle, valeur in pieces.items()}
+    if not sum(quantites.values()):
+        raise ValueError(f'Renseignez au moins une pièce dans le cadre 41 du {modele}.')
+    if not description.get('chauffage'):
+        return 0
+    return sum(qte for cle, qte in quantites.items() if cle != 'autres_annexes')
 
 
 def code_adresse(adresse):
@@ -55,9 +43,13 @@ def calculer_scenarios(saisie, adresse, referentiel, tarifs):
         raise ValueError('Choisissez une catégorie cadastrale avant de calculer.')
     if saisie['nature']=='M' and saisie.get('h1') is not None:
         valider_description_h1(saisie['h1'])
-    categories = [categorie]
     h2 = saisie.get('h2') if saisie['nature'] == 'A' else None
-    hypotheses = hypotheses_chauffage_h2(h2) if h2 is not None else [None]
+    description = saisie.get('h1') if saisie['nature'] == 'M' else h2
+    params = dict(saisie['parametres'])
+    if description is not None:
+        modele = 'H1' if saisie['nature'] == 'M' else 'H2'
+        params['pieces_chauffees'] = compter_pieces_chauffees(description, modele)
+    chauffage = {'pieces_chauffage_scenario': params['pieces_chauffees']} if description and description.get('chauffage') else {}
     reserves = []
     if h2 is not None:
         if h2.get('partie_professionnelle'):
@@ -72,25 +64,15 @@ def calculer_scenarios(saisie, adresse, referentiel, tarifs):
     dependances_completes = all('total' in d for d in distinctes)
     if saisie['nature']=='M' and saisie.get('h1',{}).get('partie_professionnelle'):
         reserves.append('Maison comportant une partie professionnelle : seule la surface affectée à l’habitation est simulée. La partie professionnelle et sa déclaration 6660-REV sont à traiter séparément.')
-    scenarios = []
-    for cat in categories:
-        rows = rechercher_tarifs(code, saisie['nature'], cat, rows=tarifs)
-        if not rows:
-            continue
-        for nombre in hypotheses:
-            params = dict(saisie['parametres'])
-            if nombre is not None:
-                # Une ancienne saisie manuelle ne doit pas survivre au passage au H2.
-                params['pieces_chauffees'] = nombre
-            sp = surface_totale(saisie['surface'], saisie['nature'], cat, dependances=dependances, **params)
-            for scenario in simulations_tarifs(sp['surface_ponderee'], rows, facteur['coefficient_cumule'], taux if complet else None):
-                if dependances_completes and 'total' in scenario:
-                    scenario['total_bien'] = round(scenario['total'] + sum(d['total'] for d in distinctes), 2)
-                scenarios.append({**scenario, 'categorie': cat, 'surfaces': sp,
-                                  **({'pieces_chauffage_scenario': nombre} if h2 and h2.get('chauffage') else {})})
-    if not scenarios:
-        raise ValueError('Aucun tarif public pour cette commune et ce type de logement'
-                         + (f' en catégorie {categorie}.' if categorie else '.'))
+    rows = rechercher_tarifs(code, saisie['nature'], categorie, rows=tarifs)
+    if not rows:
+        raise ValueError(f'Aucun tarif public pour cette commune et ce type de logement en catégorie {categorie}.')
+    sp = surface_totale(saisie['surface'], saisie['nature'], categorie, dependances=dependances, **params)
+    scenarios = simulations_tarifs(sp['surface_ponderee'], rows, facteur['coefficient_cumule'], taux if complet else None)
+    for scenario in scenarios:
+        if dependances_completes and 'total' in scenario:
+            scenario['total_bien'] = round(scenario['total'] + sum(d['total'] for d in distinctes), 2)
+        scenario.update(categorie=categorie, surfaces=sp, **chauffage)
     return {'adresse': adresse['libelle'], 'parcelle': adresse.get('parcelle'), 'code_insee': code, 'annee': annee,
             'nature': 'Maison (H1)' if saisie['nature'] == 'M' else 'Appartement (H2)',
             'categorie': categorie, 'categorie_inconnue': False,

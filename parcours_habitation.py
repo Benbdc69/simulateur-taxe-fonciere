@@ -6,7 +6,7 @@ from html import escape
 from classement_habitation import CLASSEMENT, CRITERES, libelle_categorie
 from pathlib import Path
 import streamlit as st
-from formulaire_h1 import ELEMENTS_H1, MURS, TOITURES, valider_description_h1, valider_elements_incorpores
+from formulaire_h1 import ELEMENTS_H1, valider_description_h1, valider_elements_incorpores
 from saisie_dependances import saisir_dependances
 from dependances_habitation import valider_dependances, TYPES, MODES
 from saisie_adresse import saisir_adresse
@@ -200,22 +200,15 @@ elif etape == 2:
         escalier_service = False
         ascenseur = False
         chauffage=st.checkbox('Chauffage ou climatisation dans les DOM',value=description.get('chauffage',False),help='Case 6 du cadre 42. Les coefficients de calcul actuels couvrent la métropole.')
-        pieces_chauffees_declares=st.number_input('Nombre de pièces chauffées',min_value=0,value=int(description.get('pieces_chauffees',params.get('pieces_chauffees',0))),step=1,help='Nombre saisi librement : 2 m² d’équivalence par pièce desservie, sans comptage automatique.')
-        if maison:
-            quantites['pieces_chauffees']=pieces_chauffees_declares
-            st.caption('La majoration chauffage utilise uniquement le nombre de pièces que vous déclarez.')
-        else:
+        if not maison:
             st.markdown('**Étage et ascenseur de l’immeuble — article 324 S**')
             etage = st.number_input('Niveau du logement pour le correctif d’ascenseur', min_value=0, max_value=80, value=int(params.get('etage', 0)), help='0 = rez-de-chaussée, 1 = premier niveau, etc. Selon l’article 324 S, l’entresol compte pour un étage : avec un entresol sous votre premier étage, saisissez 2. Ne comptez pas deux fois l’entresol.')
             ascenseur = st.checkbox('Ascenseur de l’immeuble desservant l’étage du logement', value=params.get('ascenseur', False), help='Renseigne la colonne « immeuble avec ascenseur » de l’article 324 S. Il s’agit de la desserte de l’étage par l’ascenseur de l’immeuble, pas d’un ascenseur privatif à l’intérieur du logement.')
             st.caption('Correctif ajouté au correctif d’ensemble : avec ascenseur, 0 au RDC et au 1er niveau, +0,05 à partir du 2e ; sans ascenseur, 0 jusqu’au 3e, −0,05 au 4e, −0,10 au 5e, −0,15 à partir du 6e. Ce correctif n’est pas une équivalence de surface en m².')
             escalier_service = st.checkbox('Escalier de service', value=h2.get('escalier_service', False), help='Case 9 du cadre 42. Cette information est conservée dans le dossier ; aucun coefficient supplémentaire n’est inventé.')
-            st.caption('La majoration sera de 2 m² × le nombre de pièces chauffées que vous saisissez. Aucun comptage automatique n’est effectué.')
         if maison:
             st.markdown('#### 43 · Caractéristiques générales de la maison')
-            st.caption('Ces renseignements descriptifs sont conservés dans le dossier et le PDF. Ils ne déterminent pas automatiquement la catégorie ou un tarif.')
-            murs=st.multiselect('Principaux matériaux des gros murs',MURS,default=h1.get('materiaux_murs',[]))
-            toitures=st.multiselect('Matériaux des toitures',TOITURES,default=h1.get('materiaux_toitures',[]))
+            st.caption('Les matériaux des murs et des toitures peuvent être renseignés lors de la préparation du formulaire H1.')
             entretien=st.selectbox('État d’entretien cadastral',list(ENTRETIEN),index=list(ENTRETIEN).index(params.get('entretien','Passable')),help='Cadre 43 C du H1 ; ce choix alimente le correctif d’entretien. À confirmer sur la fiche cadastrale.')
             construction=st.number_input('Année de construction de la maison',min_value=1,max_value=9999,value=h1.get('annee_construction'),placeholder='Si connue')
             niveaux=st.number_input('Nombre de niveaux habitables',min_value=1,value=h1.get('niveaux_habitables'),help='Rez-de-chaussée compris, greniers exclus (cadre 43 E). Ce n’est pas un correctif d’ascenseur.')
@@ -285,21 +278,20 @@ elif etape == 2:
             **quantites, **equipements,
             **({'coeff_annexes': coef_annexe if annexes else .4,'elements_incorpores':elements_h1} if maison else {'etage': etage, 'ascenseur': ascenseur})})
         if maison:
-            saisie['h1']={'pieces':pieces_declares,'chauffage':chauffage,'pieces_chauffees':pieces_chauffees_declares,
-                'materiaux_murs':murs,'materiaux_toitures':toitures,'annee_construction':construction,
+            saisie['h1']={'pieces':pieces_declares,'chauffage':chauffage,
+                **{cle: h1[cle] for cle in ('materiaux_murs', 'materiaux_toitures') if cle in h1},
+                'annee_construction':construction,
                 'niveaux_habitables':niveaux,'emprises':empreintes,'partie_professionnelle':partie_professionnelle,
                 'declaration_6660':declaration_6660}
             saisie.pop('h2', None)
         else:
-            saisie['h2'] = {'pieces': pieces_declares, 'chauffage': chauffage, 'pieces_chauffees': pieces_chauffees_declares, 'escalier_service': escalier_service, 'partie_professionnelle': partie_professionnelle, 'declaration_6660': declaration_6660}
+            saisie['h2'] = {'pieces': pieces_declares, 'chauffage': chauffage, 'escalier_service': escalier_service, 'partie_professionnelle': partie_professionnelle, 'declaration_6660': declaration_6660}
         if retour:
             aller(1)
         elif surface <= 0:
             st.error('Indiquez une surface réelle du logement supérieure à zéro.')
         elif categorie is None:
             st.error('Choisissez une catégorie cadastrale à l’aide des critères de classement, ou reprenez celle de votre fiche d’évaluation.')
-        elif not maison and not chauffage and pieces_chauffees_declares > 0:
-            st.error('Cochez le chauffage ou indiquez zéro pièce chauffée.')
         elif not maison and not sum(pieces_declares.values()):
             st.error('Renseignez au moins une pièce dans le cadre 41 du H2.')
         else:
@@ -322,8 +314,6 @@ else:
     if saisie.get('h1'):
         st.table([{'Consistance H1':H2_PIECES[k],'Nombre':v} for k,v in saisie['h1']['pieces'].items()])
         st.table([{'Caractéristique H1':libelle,'Valeur':valeur} for libelle,valeur in [
-            ('Gros murs',', '.join(saisie['h1']['materiaux_murs']) or 'Non renseignés'),
-            ('Toitures',', '.join(saisie['h1']['materiaux_toitures']) or 'Non renseignées'),
             ('Année de construction',str(saisie['h1'].get('annee_construction') or 'Non renseignée')),
             ('Niveaux habitables',str(saisie['h1'].get('niveaux_habitables') or 'Non renseignés')),
             ('Emprise au sol de la maison (descriptive)',str(saisie['h1'].get('emprises',{}).get('maison') or 'Non renseignée')),
@@ -331,7 +321,7 @@ else:
         st.table([{'Élément incorporé':ELEMENTS_H1[k],'Surface (m²)':e['surface'],'Pondération':e['coefficient']} for k,e in params.get('elements_incorpores',{}).items() if e['surface']])
     if saisie.get('h2'):
         st.table([{'Consistance H2': H2_PIECES[k], 'Nombre': v} for k,v in saisie['h2']['pieces'].items()])
-        st.write('Pièces chauffées déclarées : ' + str(saisie['h2'].get('pieces_chauffees', 0)) + ' · Chauffage : ' + ('oui' if saisie['h2']['chauffage'] else 'non') + ' · Escalier de service : ' + ('oui' if saisie['h2']['escalier_service'] else 'non'))
+        st.write('Chauffage : ' + ('oui' if saisie['h2']['chauffage'] else 'non') + ' · Escalier de service : ' + ('oui' if saisie['h2']['escalier_service'] else 'non'))
     if saisie.get('dependances'):
         st.table([{'Dépendance': d.get('designation') or TYPES[d['type']], 'Surface (m²)': d['surface'], 'Traitement': MODES[d['mode']]} for d in saisie['dependances']])
     st.write('Catégorie : **' + (libelle_categorie(saisie['categorie']) if saisie.get('categorie') else 'à choisir avant le calcul') + '**')
@@ -396,7 +386,7 @@ else:
                 st.info(f"Plusieurs séries tarifaires sont publiées dans la catégorie {r['categorie']}. La série exacte et son origine sont à confirmer sur votre fiche cadastrale.")
                 totals = [t['total'] for t in scenarios if 'total' in t]
                 if totals:
-                    st.write(f"**Fourchette des séries — catégorie {r['categorie']} : {fmt(min(totals))} à {fmt(max(totals))}**, pour le nombre de pièces chauffées déclaré et le logement avec ses dépendances rattachées, hors frais, exonérations et dépendances distinctes.")
+                    st.write(f"**Fourchette des séries — catégorie {r['categorie']} : {fmt(min(totals))} à {fmt(max(totals))}**, pour le logement avec ses dépendances rattachées, hors frais, exonérations et dépendances distinctes.")
                 else:
                     bases = [t['base_tf'] for t in scenarios]
                     st.write(f"**Fourchette des bases TFPB — catégorie {r['categorie']} : {fmt(min(bases))} à {fmt(max(bases))}**. Les cotisations restent indisponibles faute de taux documentés.")
@@ -417,6 +407,10 @@ else:
             if anciens:
                 st.warning('Taux antérieurs repris à titre indicatif : ' + ', '.join(anciens) + '.')
             st.markdown('#### Étapes du calcul')
+            if 'pieces_chauffage_scenario' in x:
+                pieces = x['pieces_chauffage_scenario']
+                st.write(f"**Majoration chauffage : {pieces} × 2 m² = +{2 * pieces} m².** "
+                         'Pièces du cadre 41 A, salles d’eau incluses et autres annexes intérieures exclues.')
             st.write(f"1. Surface comparative : **{sp['comparative']} m²**, issue du barème de catégorie {x['categorie']}.")
             net = sp['detail_surface_nette']
             if net['mode'] == 'separe':

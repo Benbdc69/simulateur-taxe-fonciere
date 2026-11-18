@@ -30,8 +30,6 @@ def valider_description_h1(description):
                 raise ValueError('Année de construction ou nombre de niveaux H1 invalide.')
     if set(description.get('materiaux_murs',[]))-set(MURS) or set(description.get('materiaux_toitures',[]))-set(TOITURES):
         raise ValueError('Matériau H1 inconnu.')
-    if not description.get('chauffage') and description.get('pieces_chauffees', 0):
-        raise ValueError('Cochez le chauffage ou indiquez zéro pièce chauffée.')
 
     for valeur in description.get('emprises',{}).values():
         if valeur is not None:

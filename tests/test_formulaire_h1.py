@@ -45,7 +45,7 @@ class H1CalculTests(unittest.TestCase):
 
     def test_validation_h1_sans_deduction_du_classement(self):
         valider_description_h1(H1)
-        for modif in [{'pieces':{}},{'annee_construction':-1},{'niveaux_habitables':0},{'materiaux_murs':['inconnu']},{'chauffage':False,'pieces_chauffees':2}]:
+        for modif in [{'pieces':{}},{'annee_construction':-1},{'niveaux_habitables':0},{'materiaux_murs':['inconnu']}]:
             with self.subTest(modif=modif),self.assertRaises(ValueError):
                 valider_description_h1({**H1,**modif})
 
@@ -85,8 +85,8 @@ class H1UITests(unittest.TestCase):
             champ(at.number_input,'Salles à manger et pièces de réception diverses').set_value(1)
             champ(at.number_input,'Surface totale des pièces et annexes affectées à l’habitation (m²)').set_value(100.)
             champ(at.number_input,'Garages incorporés (m²)').set_value(20.)
-            champ(at.multiselect,'Principaux matériaux des gros murs').set_value(['Pierre'])
-            champ(at.multiselect,'Matériaux des toitures').set_value(['Tuiles'])
+            self.assertNotIn('Principaux matériaux des gros murs', [x.label for x in at.multiselect])
+            self.assertNotIn('Matériaux des toitures', [x.label for x in at.multiselect])
             champ(at.number_input,'Année de construction de la maison').set_value(1980)
             champ(at.number_input,'Nombre de niveaux habitables').set_value(2)
             champ(at.selectbox,'Catégorie cadastrale du logement').select('5')
@@ -94,7 +94,6 @@ class H1UITests(unittest.TestCase):
             self.assertFalse(at.exception,[x.value for x in at.exception])
             self.assertEqual(at.session_state['hab_etape'],3)
             self.assertEqual(at.session_state['hab_saisie']['h1']['annee_construction'],1980)
-            self.assertEqual(at.session_state['hab_saisie']['h1']['materiaux_murs'],['Pierre'])
             champ(at.button,'Modifier mes informations').click().run()
             self.assertEqual(champ(at.number_input,'Garages incorporés (m²)').value,20.)
             self.assertEqual(champ(at.number_input,'Nombre de niveaux habitables').value,2)

@@ -76,7 +76,6 @@ def generer_pdf_habitation(d):
                              ('Toitures',', '.join(h1.get('materiaux_toitures',[])) or 'non renseignées'),
                              ('Année de construction',h1.get('annee_construction') or 'non renseignée'),
                              ('Niveaux habitables (RDC compris, greniers exclus)',h1.get('niveaux_habitables') or 'non renseignés'),
-                             ('Pièces chauffées déclarées',h1.get('pieces_chauffees',0)),
                              ('Partie professionnelle','oui' if h1.get('partie_professionnelle') else 'non'),
                              ('Déclaration 6660-REV','oui' if h1.get('declaration_6660') else 'non')]:
             story.append(Paragraph(ph(titre)+' : '+ph(valeur),st['AxNormalH']))
@@ -96,7 +95,7 @@ def generer_pdf_habitation(d):
     h=Table([[Paragraph('<b>Série</b>',st['AxNormalH']),Paragraph('<b>Tarif 1970/m²</b>',st['AxNormalH']),
               Paragraph('<b>VL 1970</b>',st['AxNormalH']),Paragraph('<b>VL année</b>',st['AxNormalH']),
               Paragraph('<b>Base TFPB</b>',st['AxNormalH']),Paragraph('<b>Sous-total*</b>',st['AxNormalH'])]]+
-          [[Paragraph(ph(x['serie'])+' / '+ph(x.get('origine') or '—') + (f"<br/>Chauffage : {x['pieces_chauffage_scenario']} pièces déclarées" if 'pieces_chauffage_scenario' in x else ''),st['AxTinyH']),eur(x['tarif_1970']),eur(x['vl_1970']),
+          [[Paragraph(ph(x['serie'])+' / '+ph(x.get('origine') or '—') + (f"<br/>Chauffage : {x['pieces_chauffage_scenario']} pièces retenues" if 'pieces_chauffage_scenario' in x else ''),st['AxTinyH']),eur(x['tarif_1970']),eur(x['vl_1970']),
             eur(x.get('vl_annee',0)),eur(x.get('base_tf',0)),eur(x['total']) if 'total' in x else 'Non calculé']
            for x in d['tarifs'][:16]],colWidths=[2.65*cm,2.45*cm,2.45*cm,2.45*cm,2.45*cm,3.0*cm],repeatRows=1)
     h.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,0),PALE),('TEXTCOLOR',(0,0),(-1,0),BLUE),
@@ -123,7 +122,7 @@ def generer_pdf_habitation(d):
         cle = 'total' if all('total' in x for x in comparables) else 'base_tf'
         label = 'cotisations hors frais et exonérations' if cle == 'total' else 'bases TFPB, cotisations indisponibles'
         valeurs = [x[cle] for x in comparables]
-        story.append(Paragraph('Fourchette des séries de la catégorie '+ph(d['categorie'])+' : '+eur(min(valeurs))+' à '+eur(max(valeurs))+' ('+ph(label)+', pour le nombre de pièces chauffées déclaré).',st['AxNormalH']))
+        story.append(Paragraph('Fourchette des séries de la catégorie '+ph(d['categorie'])+' : '+eur(min(valeurs))+' à '+eur(max(valeurs))+' ('+ph(label)+', pour le chauffage retenu).',st['AxNormalH']))
     if d.get('dependances'):
         story.append(Paragraph('Dépendances déclarées — cadre 5 '+('H1' if d.get('h1') else 'H2'),st['AxHeadH']))
         for dependance in d['dependances']:
@@ -177,7 +176,9 @@ def generer_pdf_habitation(d):
     if any(x['mode']=='incorporee' for x in d.get('dependances', [])):
         notes.append('Les dépendances rattachées sont pondérées avec les coefficients renseignés, avant le correctif d’ensemble du logement et le même tarif. Rattachement et pondération à confirmer sur la fiche cadastrale.')
     if 'pieces_chauffage_scenario' in chosen:
-        notes.append(f"Chauffage : {chosen['pieces_chauffage_scenario']} pièces et annexes déclarées chauffées x 2 m² = +{2*chosen['pieces_chauffage_scenario']} m² d’équivalence, ajoutés à la surface nette avant application du tarif. Le nombre est saisi par l’utilisateur ; aucun comptage automatique n’est effectué.")
+        pieces = chosen['pieces_chauffage_scenario']
+        notes.append(f'Majoration chauffage : {pieces} x 2 m² = +{2 * pieces} m² ajoutés à la surface nette. '
+                     'Le décompte reprend les pièces du cadre 41 A, salles d’eau incluses et autres annexes intérieures exclues.')
     if not d.get('categorie_confirmee'):
         notes.append('Catégorie choisie à titre indicatif avec l’aide au classement : elle ne constitue pas un classement confirmé par l’administration. À vérifier sur la fiche cadastrale.')
     if d.get('categorie_inconnue'):

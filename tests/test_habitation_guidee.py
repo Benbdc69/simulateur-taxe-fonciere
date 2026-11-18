@@ -92,26 +92,27 @@ class HabitationGuideeTests(unittest.TestCase):
         self.assertIn('Cotisations par composante', synthese)
         self.assertIn('Annexe — détail du calcul', pages[1].extract_text())
 
-    def test_h2_nombre_chauffe_libre_sans_comptage_automatique(self):
+    def test_h2_chauffage_automatique_exclut_les_autres_annexes(self):
         self.saisie['h2'] = {'pieces': {'reception': 1, 'chambres': 2, 'cuisines_moins_9': 1,
-                                      'salles_eau': 1, 'autres_annexes': 1}, 'chauffage': True, 'pieces_chauffees': 3}
+                                      'salles_eau': 1, 'autres_annexes': 7}, 'chauffage': True, 'pieces_chauffees': 3}
         self.saisie['parametres']['pieces_chauffees'] = 99
         r = self.calculer()
-        self.assertEqual(len(r['tarifs']), 2)
         x = r['tarifs'][0]
-        self.assertEqual(x['pieces_chauffage_scenario'], 3)
-        self.assertEqual(x['surfaces']['detail_confort']['Pièces chauffées admissibles'], 6)
-        self.assertEqual(x['surfaces']['surface_ponderee'], 74)
-        self.saisie['h2']['pieces_chauffees'] = 1
-        self.assertEqual(self.calculer()['tarifs'][0]['surfaces']['surface_ponderee'], 70)
+        self.assertEqual(x['pieces_chauffage_scenario'], 5)
+        self.assertEqual(x['surfaces']['detail_confort']['Pièces chauffées admissibles'], 10)
+        self.assertEqual(x['surfaces']['surface_ponderee'], 78)
         dossier = {**r, 'categorie': '5', 'surfaces': x['surfaces'], 'serie_selectionnee': 0, 'source_tarifs': SOURCE}
-        self.assertTrue(generer_pdf_habitation(dossier).startswith(b'%PDF'))
+        pages = PdfReader(BytesIO(generer_pdf_habitation(dossier))).pages
+        details = ' '.join(page.extract_text() for page in pages[1:])
+        self.assertIn('Majoration chauffage : 5 x 2 m² = +10 m²', details)
 
-    def test_h2_nombre_chauffe_non_deduit_si_manquant(self):
-        for valeur in [None, -1, 1.5, float('nan')]:
-            with self.subTest(valeur=valeur), self.assertRaises(ValueError):
-                self.saisie['h2'] = {'pieces': {'chambres': 3}, 'chauffage': True, 'pieces_chauffees': valeur}
-                self.calculer()
+    def test_h1_chauffage_automatique_inclut_les_grandes_cuisines(self):
+        self.saisie.update(nature='M', h1={'pieces': {'cuisines_9_plus': 4, 'salles_eau': 3,
+                                                     'reception': 1, 'autres_annexes': 2}, 'chauffage': True})
+        self.rows = [{**ligne, 'nature': 'M'} for ligne in self.rows]
+        x = self.calculer()['tarifs'][0]
+        self.assertEqual(x['pieces_chauffage_scenario'], 8)
+        self.assertEqual(x['surfaces']['detail_confort']['Pièces chauffées admissibles'], 16)
 
     def test_h2_sans_chauffage_aucune_equivalence_ajoutee(self):
         self.saisie['h2'] = {'pieces': {'reception': 1}, 'chauffage': False,

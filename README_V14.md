@@ -60,10 +60,10 @@ l’escalier de service. La rubrique sanitaire compte uniquement les lavabos ; l
 Les correctifs et le classement réservés à l’administration sont regroupés
 dans un volet facultatif.
 
-Le nombre de pièces chauffées est saisi librement par l’utilisateur. Le moteur
-applique uniquement 2 m² d’équivalence par pièce déclarée chauffée. Aucun nombre
-n’est déduit de la consistance H2 et aucun scénario automatique zéro/toutes les
-pièces n’est généré. L’escalier de service est conservé sans correctif automatique.
+Lorsque le chauffage est coché, le simulateur retient les pièces du cadre 41 A,
+y compris les cuisines et les salles d’eau, sauf les autres annexes intérieures.
+Il applique 2 m² d’équivalence par pièce retenue. L’escalier de service est
+conservé sans correctif automatique.
 La partie professionnelle demeure hors du calcul habitation.
 
 Le résultat habitation reprend les cartes du parcours professionnel : montant
@@ -80,11 +80,11 @@ ne remplacent pas le classement par comparaison avec les locaux de référence
 communaux. Les catégories intermédiaires restent disponibles.
 
 Lorsque plusieurs séries existent dans la catégorie choisie, la fourchette
-concerne uniquement ces séries pour le même nombre de pièces chauffées déclaré. Le PDF conserve ce même périmètre. Sans taux
+concerne uniquement ces séries pour le même décompte de pièces. Le PDF conserve ce même périmètre. Sans taux
 complets, la fourchette porte sur les bases TFPB, sans inventer de cotisations.
 
 Le résultat et le PDF explicitent la majoration chauffage : nombre de pièces
-chauffées saisi × 2 m². Ces m² sont des équivalences, pas de la surface réelle.
+retenues × 2 m². Ces m² sont des équivalences, pas de la surface réelle.
 
 ### Ascenseur de l’immeuble — article 324 S
 
@@ -223,7 +223,8 @@ et correctifs toujours visibles. Les niveaux comprennent le RDC et excluent
 les greniers ; ils ne créent pas de correctif d’ascenseur pour une maison.
 Les éviers restent exclus ; les équipements non présents au H1 (vide-ordures,
 ascenseur collectif, escalier de service) ne sont pas demandés dans ce parcours.
-Le chauffage conserve sa case et un nombre de pièces librement saisi.
+Les matériaux des murs et des toitures (43 A et B) sont saisis dans la fenêtre
+de préparation du H1. Le calcul du chauffage H1 suit le même décompte que le H2.
 
 Le cadre 5 H1 dispose du même bouton d’ajout que le H2, avec une décomposition
 par dépendance des surfaces garages, caves, greniers, terrasses et agrément,
