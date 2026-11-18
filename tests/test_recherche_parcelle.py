@@ -138,6 +138,13 @@ class RechercheParcelleUI(unittest.TestCase):
             telechargements = [bouton.proto.label for bouton in at.get('download_button')]
             self.assertIn('Télécharger le 6660-REV', [bouton.label for bouton in at.button])
             self.assertIn('Télécharger mon estimation en PDF', telechargements)
+            self.assertNotIn('P1 · Principale', [champ.label for champ in at.number_input])
+            at.run()
+            champ(at.button, 'Modifier mes informations').click().run()
+            self.assertFalse(at.exception)
+            self.assertEqual(champ(at.number_input, 'P1 · Principale').value, 100.)
+            self.assertEqual(champ(at.selectbox, 'Catégorie du local').value, 'BUR2')
+            self.assertEqual(champ(at.text_input, 'Numéro de parcelle').value, '242')
             geo.assert_not_called()
 
     def test_professionnel_prefixes_distincts_exigent_selection(self):
