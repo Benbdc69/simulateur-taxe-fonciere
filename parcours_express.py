@@ -20,7 +20,6 @@ from historique_taux import resoudre_tout
 from mise_a_jour_simple import synchroniser_dgfip, synchroniser_taux
 from export_pdf import creer_pdf_estimation
 from saisie_declaration import afficher_declaration
-from saisie_cfe import afficher_cfe
 from frais_gestion import afficher_frais
 from montants import euro_arrondi
 from mesure_cadastrale import afficher_mesures
@@ -312,7 +311,7 @@ if calcule:
     st.caption(f"{calcule['adresse']} · {calcule['annee']} · {calcule['categorie']}")
     bien = calcule['bien']
     st.caption(f"Parcelle {bien['section']} {bien['numero']} · {bien['commune']}")
-    synthese, cfe = st.columns(2)
+    synthese = st.container()
     rapport, declaration = st.columns(2)
     frais = None
     if result:
@@ -333,8 +332,6 @@ if calcule:
         planch = analyse.get('planchonnement', {})
         if planch.get('reserve'):
             st.warning(planch['reserve'])
-    with cfe:
-        afficher_cfe(bien['code_insee'], calcule['annee'], partial['valeur_locative_brute'])
     rapport.download_button(
         'Télécharger mon estimation en PDF',
         data=creer_pdf_estimation({**calcule, 'frais': frais}),

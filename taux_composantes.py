@@ -104,7 +104,7 @@ def _name_candidates(label):
         'TAXEFB','TFPB','TAUXTFB','TAUXFB','TFB')) or bool(re.search(r'\bFB\b',str(label).upper()))
 
 
-def _classer_colonne(label, nature, annee, taxe):
+def _classer_colonne(label, nature, annee):
     t=norm(label)
     if nature=='communes':
         if t in ('CODECOMMUNE','CODEINSEE','CODGEO','INSEE','INSEECOMMUNE','CODEINSEECOMMUNE','CODCOM','CODEOFFICIELGEOGRAPHIQUE','CODECOMMUNAL') or 'CODEINSEE' in t and 'EPCI' not in t:
@@ -113,18 +113,6 @@ def _classer_colonne(label, nature, annee, taxe):
     else:
         if t in ('SIREN','SIRENEPCI','CODEEPCI','CODEGROUPEMENT','NUMEROSIREN','SIRENDUEPCI','CODEINSEEEPCI') or ('SIREN' in t and 'COMMUNE' not in t):
             return 'code'
-    if taxe == 'CFE':
-        if not ('CFE' in t or 'COTISATIONFONCIEREDESENTREPRISES' in t):
-            return None
-        if any(mot in t for mot in ('MOYEN', 'VARIATION', 'EVOLUTION', 'PRODUIT', 'BASE', 'PLAFOND', 'MINIMUM')):
-            return None
-        millesimes = re.findall(r'(?:19|20)\d{2}', t)
-        if any(int(a) != int(annee) for a in millesimes):
-            return None
-        libelle = re.sub(r'(?:19|20)\d{2}', '', t)
-        if 'TAUX' in libelle or libelle in ('CFE', 'COTISATIONFONCIEREDESENTREPRISES'):
-            return 'taux'
-        return None
     if _name_candidates(label) and ('TAUX' in t or 'FONCIERBATI' in t or 'PROPRIETESBATIES' in t or 'TFPB' in t or 'TAUXFB' in t or t == 'TFB'):
         if str(annee-1) in t and str(annee) not in t:
             return None
@@ -132,15 +120,15 @@ def _classer_colonne(label, nature, annee, taxe):
     return None
 
 
-def lire_tableur_dgcl(contenu, nature, annee, taxe='TFPB'):
+def lire_tableur_dgcl(contenu, nature, annee):
     """Accepte en-têtes mono/multilignes, refuse colonnes taux ambiguës.
 
     Conserve la provenance et la numération de taux en pourcents, y compris
     les cellules Excel ayant un format '%' (valeur interne 0.3189).
     """
     from openpyxl import load_workbook
-    if nature not in ('communes','EPCI') or taxe not in ('TFPB', 'CFE'):
-        raise ValueError('Type de document ou taxe DGCL non reconnu.')
+    if nature not in ('communes','EPCI'):
+        raise ValueError('Type de document DGCL non reconnu.')
     if len(contenu)>20_000_000:
         raise ValueError('Classeur trop volumineux.')
     try:
@@ -173,7 +161,7 @@ def lire_tableur_dgcl(contenu, nature, annee, taxe='TFPB'):
                 chosen=direct
                 role=None
                 for label in proposed:
-                    candidate=_classer_colonne(label,nature,annee,taxe)
+                    candidate=_classer_colonne(label,nature,annee)
                     if candidate:
                         role=candidate; chosen=label
                         break
@@ -185,7 +173,7 @@ def lire_tableur_dgcl(contenu, nature, annee, taxe='TFPB'):
                 candidates.append((score,ws.title,h,mapping,labels))
                 break
     if not candidates:
-        raise ValueError(f'Colonnes Code commune/SIREN et {taxe} non reconnues dans le classeur DGCL. '
+        raise ValueError('Colonnes Code commune/SIREN et TFPB non reconnues dans le classeur DGCL. '
                          'Transmettez ce XLSX pour adapter les en-têtes.')
     candidates.sort(key=lambda x:x[0],reverse=True)
     _,sheet_name,h,mapping,labels=candidates[0]
@@ -219,7 +207,7 @@ def lire_tableur_dgcl(contenu, nature, annee, taxe='TFPB'):
     # La DGCL publie >30 000 communes et ~1250 EPCI : éviter les faux positifs.
     minimum=1  # tests et imports partiels autorisés : la source n'est pas certifiée ici.
     if len(result)<minimum:
-        raise ValueError(f'Aucune donnée de taux {taxe} exploitable dans le tableau '+sheet_name)
+        raise ValueError('Aucune donnée de taux TFPB exploitable dans le tableau '+sheet_name)
     return {'taux':result,'feuille':sheet_name,'colonnes':{'code':labels[col_code],'taux':labels[col_taux]},
             'nombre_lignes':compte,'nombre_identifiants':len(result),
             'empreinte':hashlib.sha256(contenu).hexdigest()}
@@ -231,7 +219,7 @@ def siren_epci(code_insee, session=None):
         raise ValueError('Code commune invalide pour l’API Géo.')
     sess=session or requests.Session()
     doc=_get(sess,GEO_API+quote(code),params={'fields':'nom,code,codeEpci'},timeout=15).json()
-    if not isinstance(doc, dict) or str(doc.get('code') or '') != code:
+    if str(doc.get('code') or '') != code:
         raise ValueError('Le code de commune renvoyé par API Géo ne correspond pas.')
     siren=str(doc.get('codeEpci') or '')
     if not re.fullmatch(r'\d{9}',siren):
@@ -239,7 +227,7 @@ def siren_epci(code_insee, session=None):
     return siren
 
 
-def rechercher_dgcl(code_insee,annee,session=None,fichier_communes=None,fichier_epci=None,siren=None,taxe='TFPB'):
+def rechercher_dgcl(code_insee,annee,session=None,fichier_communes=None,fichier_epci=None,siren=None):
     """Ne considère jamais le taux voté comme nécessairement appliqué à la parcelle.
 
     Les fichiers (bytes, URL) optionnels permettent l'import manuel hors réseau.
@@ -257,7 +245,7 @@ def rechercher_dgcl(code_insee,annee,session=None,fichier_communes=None,fichier_
         else:
             data,url=telecharger_classeur(annee,nature,sess)
         source_urls[nature]=url
-        return lire_tableur_dgcl(data,nature,annee,taxe=taxe)
+        return lire_tableur_dgcl(data,nature,annee)
     ccode=code_commune_fiscale(code_insee)
     try:
         communes=lire('communes',fichier_communes)
