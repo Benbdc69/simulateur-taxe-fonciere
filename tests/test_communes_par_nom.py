@@ -28,13 +28,14 @@ class CommunesTests(unittest.TestCase):
 
     def test_erreurs_service_et_reponses_invalides(self):
         with patch('recherche_bien.requests.get', side_effect=requests.Timeout):
-            with self.assertRaisesRegex(ConnectionError, 'manuellement'):
-                rechercher_communes('Lyon')
+            self.assertEqual(rechercher_communes('Lyon', '69')[0]['insee'], '69123')
+            filtre = rechercher_communes('Andrezieux Boutheon', '42')
+            self.assertEqual([commune['insee'] for commune in filtre], ['42005'])
+            self.assertEqual(rechercher_communes('Lyon', '2A'), [])
         response = Mock()
         response.json.return_value = {'erreur': 'réponse incorrecte'}
         with patch('recherche_bien.requests.get', return_value=response):
-            with self.assertRaises(ConnectionError):
-                rechercher_communes('Lyon')
+            self.assertEqual(rechercher_communes('Lyon')[0]['insee'], '69123')
         with patch('recherche_bien.requests.get') as api:
             for nom, dep in [('A', ''), ('Lyon', 'abc')]:
                 with self.assertRaises(ValueError):

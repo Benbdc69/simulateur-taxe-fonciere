@@ -1,8 +1,39 @@
 """Recherche cadastrale partagée, sans géocodage ni adresse obligatoire."""
+import json
+from functools import lru_cache
+from pathlib import Path
 import re
+import unicodedata
 import streamlit as st
 import requests
 from cadastre import rechercher_parcelle
+
+
+def normaliser_nom_commune(nom):
+    nom = unicodedata.normalize('NFKD', nom.casefold().replace('œ', 'oe').replace('æ', 'ae'))
+    nom = ''.join(c for c in nom if not unicodedata.combining(c))
+    return ' '.join(re.findall(r'[a-z0-9]+', nom))
+
+
+@lru_cache(maxsize=1)
+def referentiel_communes():
+    source = Path(__file__).resolve().parent / 'data' / 'communes_2026.json'
+    with source.open(encoding='utf-8') as fichier:
+        communes = json.load(fichier)['communes']
+    return [(normaliser_nom_commune(nom), nom, code, dep) for nom, code, dep in communes]
+
+
+def rechercher_communes_locales(nom, departement):
+    requete = normaliser_nom_commune(nom)
+    if not requete:
+        return []
+    resultats = [
+        (normalise != requete, not normalise.startswith(requete), libelle, dep, code)
+        for normalise, libelle, code, dep in referentiel_communes()
+        if requete in normalise and (not departement or dep == departement)
+    ]
+    return [{'commune': libelle, 'insee': code, 'departement': dep}
+            for _, _, libelle, dep, code in sorted(resultats)[:30]]
 
 
 def rechercher_communes(nom, departement=""):
@@ -19,10 +50,13 @@ def rechercher_communes(nom, departement=""):
         response = requests.get('https://geo.api.gouv.fr/communes', params=params, timeout=(5, 15))
         response.raise_for_status()
         rows = response.json()
-    except (requests.RequestException, ValueError) as exc:
-        raise ConnectionError('La recherche officielle des communes est indisponible. Vous pouvez saisir le code INSEE manuellement.') from exc
-    if not isinstance(rows, list):
-        raise ConnectionError('Réponse inattendue du service des communes.')
+        if not isinstance(rows, list):
+            raise ValueError('Réponse inattendue du service des communes.')
+    except (requests.RequestException, ValueError):
+        try:
+            return rechercher_communes_locales(query, departement)
+        except (OSError, ValueError) as exc:
+            raise ConnectionError('La recherche des communes est indisponible. Vous pouvez saisir le code INSEE manuellement.') from exc
     resultats = {}
     for row in rows:
         if not isinstance(row, dict):
@@ -58,6 +92,8 @@ def saisir_commune(cle, valeurs=None):
     departement = st.text_input('Département (facultatif)', value=st.session_state.get(cle+'_commune_departement', ''), key=cle+'_dept_recherche', help='Pour affiner une recherche en cas d’homonymes : par exemple 42, 2A ou 971. Vous pouvez laisser vide.')
     if st.button('Rechercher la commune', key=cle+'_chercher_commune'):
         st.session_state[cle+'_communes'] = []
+        st.session_state.pop(cle+'_choix_commune', None)
+        st.session_state.pop(cle+'_arrondissement', None)
         st.session_state[cle+'_commune_query'] = nom.strip()
         st.session_state[cle+'_commune_departement'] = departement.strip().upper()
         try:
