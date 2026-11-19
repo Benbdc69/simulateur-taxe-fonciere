@@ -2,8 +2,8 @@
 import streamlit as st
 
 st.title('Simulateur de taxe foncière')
-st.write('Quel type de local souhaitez-vous évaluer ?')
-a, b = st.columns(2)
+st.write('Choisissez votre simulation.')
+a, b, c = st.columns(3)
 with a:
     with st.container(border=True):
         st.markdown('### 🏢 Local professionnel')
@@ -16,4 +16,10 @@ with b:
         st.write('Appartement ou maison. Consistance, confort et classement cadastral selon les déclarations H2 ou H1.')
         if st.button('Local d’habitation', type='primary', use_container_width=True):
             st.switch_page('parcours_habitation.py')
-st.caption('Une recherche par adresse ou par parcelle cadastrale est disponible dans les deux parcours.')
+with c:
+    with st.container(border=True):
+        st.markdown('### 🧾 CFE – Base minimum')
+        st.write('Estimez la cotisation minimum de votre entreprise selon la commune, l’année et le chiffre d’affaires N−2.')
+        if st.button('CFE – Base minimum', type='primary', use_container_width=True):
+            st.switch_page('parcours_cfe.py')
+st.caption('Les parcours de taxe foncière permettent une recherche par adresse ou par parcelle cadastrale.')

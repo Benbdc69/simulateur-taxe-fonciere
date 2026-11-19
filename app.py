@@ -48,6 +48,7 @@ pages=[
     st.Page('accueil.py', title='Accueil', icon='🏠', default=True),
     st.Page('parcours_express.py',title='Local professionnel',icon='🏢'),
     st.Page('parcours_habitation.py',title='Habitation H1 / H2',icon='🏠'),
+    st.Page('parcours_cfe.py', title='CFE – Base minimum', icon='🧾'),
 ]
 pg=st.navigation(pages,position='hidden')
 st.session_state['_navigation_portail'] = True

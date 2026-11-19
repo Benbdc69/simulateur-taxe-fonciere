@@ -24,12 +24,12 @@ class AccueilEtSaisieTests(unittest.TestCase):
         self.env.start()
         self.addCleanup(self.env.stop)
 
-    def test_accueil_et_deux_boutons_de_navigation(self):
+    def test_accueil_et_tuiles_de_navigation(self):
         for label, titre in [('Local professionnel', 'Estimez votre taxe foncière'), ('Local d’habitation', 'Estimez la taxe foncière de votre logement')]:
             with self.subTest(label=label):
                 at = AppTest.from_file(str(ROOT/'app.py')).run()
                 self.assertFalse(at.exception)
-                self.assertEqual([x.label for x in at.button], ['Local professionnel', 'Local d’habitation'])
+                self.assertEqual([x.label for x in at.button], ['Local professionnel', 'Local d’habitation', 'CFE – Base minimum'])
                 self.assertEqual(len(at.text_input), 0)
                 champ(at.button, label).click().run()
                 self.assertFalse(at.exception, [x.value for x in at.exception])
@@ -40,7 +40,45 @@ class AccueilEtSaisieTests(unittest.TestCase):
                 self.assertIn(titre, [x.value for x in at.title])
                 champ(at.button, 'Retour à l’accueil').click().run()
                 self.assertFalse(at.exception)
-                self.assertEqual([x.label for x in at.button], ['Local professionnel', 'Local d’habitation'])
+                self.assertEqual([x.label for x in at.button], ['Local professionnel', 'Local d’habitation', 'CFE – Base minimum'])
+
+    @patch('cfe_minimum.millesimes.recuperer_pour_annee')
+    def test_tuile_cfe_calcule_au_changement_d_annee(self, charger):
+        def bareme(code, annee):
+            return {
+                'donnees': {
+                    'commune': 'Lyon',
+                    'code_insee': code,
+                    'millesime': annee,
+                    'base_minimum_eur': [{'tranche': 3, 'base': 300 if annee == 2022 else 400}],
+                    'taux_global_hors_zone_activite_pct': 25,
+                },
+                'annee_demandee': annee,
+                'annee_utilisee': annee,
+                'estimation_n_moins_1': False,
+            }
+
+        charger.side_effect = bareme
+        at = AppTest.from_file(str(ROOT/'app.py')).run()
+        champ(at.button, 'CFE – Base minimum').click().run()
+        self.assertFalse(at.exception)
+        champ(at.text_input, 'Commune ou code INSEE').input('Lyon').run()
+        champ(at.selectbox, 'Commune à retenir').select('69123')
+        champ(at.number_input, 'Année de CFE').set_value(2022).run()
+        champ(at.text_input, 'Chiffre d’affaires HT 2020 (€)').input('55 000').run()
+        self.assertFalse(at.error)
+        self.assertEqual(champ(at.metric, 'Cotisation minimum estimée').value, '75,00 €')
+        charger.assert_called_once_with('69123', 2022)
+
+        champ(at.number_input, 'Année de CFE').set_value(2023).run()
+        self.assertEqual(champ(at.metric, 'Cotisation minimum estimée').value, '100,00 €')
+        self.assertIsNotNone(champ(at.text_input, 'Chiffre d’affaires HT 2021 (€)'))
+        charger.assert_called_with('69123', 2023)
+        champ(at.button, 'Nouveau calcul').click().run()
+        self.assertFalse(at.metric)
+        self.assertEqual(champ(at.text_input, 'Commune ou code INSEE').value, '')
+        champ(at.button, 'Retour à l’accueil').click().run()
+        self.assertIsNotNone(champ(at.button, 'CFE – Base minimum'))
 
     def test_nouveau_calcul_professionnel_efface_saisies_sans_deconnexion(self):
         at = AppTest.from_file(str(ROOT/'parcours_express.py'))
