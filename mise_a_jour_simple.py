@@ -7,14 +7,15 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
-import os
 from datetime import datetime
-from pathlib import Path
+from threading import Lock
 from actualiser import preparer_proposition, PENDING, ACTIVE, BASE
 from collecte_taux import preparer as proposer_taux
 from historique_taux import code_reference, enregistrer
+from stockage_fiscal import ecrire_atomiquement
 
-HISTORY=BASE.parent/'historique'
+HISTORY=ACTIVE.parent/'historique'
+VERROU_REFERENTIEL = Lock()
 
 def ouvrir_referentiel():
     path=ACTIVE if ACTIVE.exists() else BASE
@@ -22,19 +23,15 @@ def ouvrir_referentiel():
 
 
 def enregistrer_referentiel(ref, *, expected_sha256=None):
-    path=ACTIVE if ACTIVE.exists() else BASE
-    if expected_sha256 is not None:
-        checksum=hashlib.sha256(path.read_bytes()).hexdigest()
-        if checksum!=expected_sha256:
+    with VERROU_REFERENTIEL:
+        actif = ACTIVE.exists()
+        precedent = (ACTIVE if actif else BASE).read_bytes()
+        if expected_sha256 is not None and hashlib.sha256(precedent).hexdigest() != expected_sha256:
             raise ValueError('Le référentiel a changé pendant cette opération. Actualisez la page.')
-    ACTIVE.parent.mkdir(parents=True,exist_ok=True)
-    if ACTIVE.exists():
-        HISTORY.mkdir(parents=True,exist_ok=True)
-        t=datetime.now().strftime('%Y%m%d-%H%M%S-%f')
-        (HISTORY/f'referentiel-{t}.json').write_bytes(ACTIVE.read_bytes())
-    tmp=ACTIVE.with_suffix('.tmp')
-    tmp.write_text(json.dumps(ref,ensure_ascii=False,separators=(',',':')),encoding='utf-8')
-    os.replace(tmp,ACTIVE)
+        if actif:
+            t = datetime.now().strftime('%Y%m%d-%H%M%S-%f')
+            ecrire_atomiquement(HISTORY / f'referentiel-{t}.json', precedent)
+        ecrire_atomiquement(ACTIVE, json.dumps(ref, ensure_ascii=False, separators=(',', ':')).encode('utf8'))
 
 
 def verifier_proposition(proposition,departement,annee):
@@ -69,8 +66,9 @@ def synchroniser_dgfip(annee,dep,*, prepare=preparer_proposition):
 def synchroniser_taux(annee,code_insee, *, preparer=proposer_taux):
     code=code_reference(code_insee)
     proposal=preparer(code,int(annee))
-    ref=ouvrir_referentiel()
-    start=hashlib.sha256((ACTIVE if ACTIVE.exists() else BASE).read_bytes()).hexdigest()
+    contenu = (ACTIVE if ACTIVE.exists() else BASE).read_bytes()
+    ref = json.loads(contenu)
+    start = hashlib.sha256(contenu).hexdigest()
     changed=[]; existing=[]
     for k, rec in proposal.get('propositions',{}).items():
         y=str(rec.get('annee',''))

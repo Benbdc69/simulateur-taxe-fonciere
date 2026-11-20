@@ -13,16 +13,16 @@ import hashlib
 import json
 import sys
 from datetime import datetime, timezone
-from pathlib import Path
+from stockage_fiscal import DONNEES_LIVREES, dossier_fiscal, ecrire_atomiquement
 from imports_dgfip import url_fichier, telecharger, importer, construire_source
 from referentiel import (DEPARTEMENTS, normaliser_departement,
                          publication_attendue, integrer_jeu)
 
-HOME = Path(__file__).resolve().parent
-BASE = HOME/'data'/'referentiel_initial.json'
-ACTIVE = HOME/'data'/'referentiel_local.json'
-PENDING = HOME/'data'/'en_attente'/'proposition.json'
-LOG = HOME/'data'/'journal_sync.log'
+BASE = DONNEES_LIVREES / 'referentiel_initial.json'
+DOSSIER_FISCAL = dossier_fiscal()
+ACTIVE = DOSSIER_FISCAL / 'referentiel_local.json'
+PENDING = DOSSIER_FISCAL / 'en_attente' / 'proposition.json'
+LOG = DOSSIER_FISCAL / 'journal_sync.log'
 
 
 def journal(message):
@@ -70,9 +70,7 @@ def preparer_proposition(annee,deps, *, fetch=telecharger, parse=importer):
     proposal={'cree_le':datetime.now(timezone.utc).isoformat(),
               'base_sha256':hashlib.sha256(active_bytes).hexdigest(),
               'modifications':changes,'echecs':failures,'referentiel':staged}
-    temporary=PENDING.with_suffix('.tmp')
-    temporary.write_text(json.dumps(proposal,ensure_ascii=False,separators=(',',':')),encoding='utf8')
-    temporary.replace(PENDING)
+    ecrire_atomiquement(PENDING, json.dumps(proposal,ensure_ascii=False,separators=(',',':')).encode('utf8'))
     journal(f'PROPOSITION {len(changes)} modifications, {len(failures)} incidents, {len(unchanged)} identiques.')
     return {'changements':len(changes),'identiques':len(unchanged),'echecs':failures,
             'proposition':str(PENDING)}

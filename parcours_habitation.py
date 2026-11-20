@@ -1,10 +1,8 @@
 """Parcours guidé H1/H2 : adresse confirmée, saisie expliquée, calcul traçable."""
 from __future__ import annotations
-import json
 from datetime import date
 from html import escape
 from classement_habitation import CLASSEMENT, CRITERES, libelle_categorie
-from pathlib import Path
 import streamlit as st
 from formulaire_h1 import ELEMENTS_H1, valider_description_h1, valider_elements_incorpores
 from saisie_dependances import saisir_dependances
@@ -14,7 +12,7 @@ from session_calcul import bouton_nouveau_calcul, cle_calcul
 from cadastre import adresses
 from recherche_bien import saisir_reference, identifier_par_reference, saisir_commune
 from historique_taux import resoudre_tout, COMPOSANTES, LIBELLES
-from mise_a_jour_simple import synchroniser_taux
+from mise_a_jour_simple import ouvrir_referentiel as load_ref, synchroniser_taux
 from moteur_habitation import ENTRETIEN, SITUATION, CATEGORIES
 from tarifs_habitation import tarifs_nationaux, SOURCE
 from dossier_habitation import code_adresse, calculer_scenarios, H2_PIECES
@@ -22,14 +20,6 @@ from export_habitation_pdf import generer_pdf_habitation
 from saisie_declaration import afficher_declaration
 from frais_gestion import afficher_frais
 from montants import euro_arrondi
-
-ROOT = Path(__file__).resolve().parent
-
-
-def load_ref():
-    local = ROOT / 'data' / 'referentiel_local.json'
-    return json.loads((local if local.exists() else ROOT / 'data' / 'referentiel_initial.json').read_text(encoding='utf-8'))
-
 
 def fmt(value):
     return f'{float(value):,.2f}'.replace(',', ' ').replace('.', ',') + ' €'

@@ -6,7 +6,6 @@ from __future__ import annotations
 import json
 import os
 from datetime import datetime
-from pathlib import Path
 import streamlit as st
 from saisie_adresse import saisir_adresse
 from session_calcul import bouton_nouveau_calcul, cle_calcul
@@ -17,7 +16,8 @@ from moteur import (COEFF_SURFACES, TAXES, insee_cadastral_adresse,
                     localisation_automatique, neutralisation_avec_teom_reference,
                     tarif_automatique, estimation)
 from historique_taux import resoudre_tout
-from mise_a_jour_simple import synchroniser_dgfip, synchroniser_taux
+from actualiser import BASE
+from mise_a_jour_simple import ouvrir_referentiel as lire_ref, synchroniser_dgfip, synchroniser_taux
 from export_pdf import creer_pdf_estimation
 from saisie_declaration import afficher_declaration
 from frais_gestion import afficher_frais
@@ -25,16 +25,6 @@ from montants import euro_arrondi
 from mesure_cadastrale import afficher_mesures
 from exoneration_neuf import exon_neuf_non_habitation
 from planchonnement_saisie import preparer_planchonnement, valider_corrections
-
-ROOT = Path(__file__).resolve().parent
-BASE = ROOT / 'data' / 'referentiel_initial.json'
-LOCAL = ROOT / 'data' / 'referentiel_local.json'
-
-
-def lire_ref():
-    source = LOCAL if LOCAL.exists() else BASE
-    return json.loads(source.read_text(encoding='utf-8'))
-
 
 def euro(val):
     return f'{float(val):,.2f}'.replace(',', ' ').replace('.', ',') + ' €'
@@ -116,7 +106,8 @@ def actualiser_si_necessaire(annee, bien):
         erreurs.extend(b.get('incidents',[]))
     except Exception as exc:
         erreurs.append('Sources de taux indisponibles : '+str(exc))
-    done[cle]=erreurs
+    if not erreurs:
+        done[cle] = []
     return erreurs
 
 
@@ -124,11 +115,17 @@ def actualiser_si_necessaire(annee, bien):
 
 def finaliser(candidat, categorie, surfaces, annee, construction_nouvelle=False, annee_achevement=None, historique="inconnu", corrections_planchonnement=None):
     adresse_result, parcelle = candidat
-    bien=normaliser_identite(parcelle,adresse_result,lire_ref())
+    ref = lire_ref()
+    bien = normaliser_identite(parcelle, adresse_result, ref)
+    initial = json.loads(BASE.read_text(encoding='utf-8'))
     with st.spinner('Calcul à partir des barèmes et taux disponibles…'):
-        issues=actualiser_si_necessaire(annee,bien)
-        res=calculer_dossier(lire_ref(),json.loads(BASE.read_text(encoding='utf-8')),
-             bien,categorie,surfaces,annee,construction_nouvelle,annee_achevement,historique,corrections_planchonnement)
+        res = calculer_dossier(ref, initial, bien, categorie, surfaces, annee,
+                               construction_nouvelle, annee_achevement, historique, corrections_planchonnement)
+        issues = []
+        if not res['result'] or any(t and t['annee_source'] < annee for t in res['taux'].values()):
+            issues = actualiser_si_necessaire(annee, bien)
+            res = calculer_dossier(lire_ref(), initial, bien, categorie, surfaces, annee,
+                                   construction_nouvelle, annee_achevement, historique, corrections_planchonnement)
     st.session_state['_calcul_express']={
         'bien':bien,'adresse':adresse_result['libelle'], 'adresse_declaree':adresse_result,
         'categorie':categorie,'annee':annee, 'construction_nouvelle':construction_nouvelle, 'annee_achevement':annee_achevement,

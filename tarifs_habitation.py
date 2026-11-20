@@ -1,14 +1,16 @@
 """DGFiP - tarifs locaux d'habitation 2024 en valeur de référence 1970.
 Conserve EXACTEMENT les catégories intermédiaires 1M..7M et l'identité
-commune d'origine + série tarifaire. Source nationale 17,2 Mo, cachée en mémoire.
+commune d'origine + série tarifaire. Source nationale 17,2 Mo, conservée sur disque et en mémoire.
 """
 from __future__ import annotations
 import csv
 import io
+import logging
 import re
 import unicodedata
 from functools import lru_cache
 import requests
+from stockage_fiscal import dossier_fiscal, ecrire_atomiquement
 
 DATASET='descriptif-tarifs-des-locaux-d-habitation_2024'
 URL=f'https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/{DATASET}/exports/csv?use_labels=true'
@@ -50,10 +52,13 @@ def _categorie(v):
     return s if re.fullmatch('[1-8]|[1-7]M',s) else None
 
 def parse_csv(text):
-    text=text.lstrip('\ufeff')
-    head=text.splitlines()[0]
+    flux = io.StringIO(text.lstrip('\ufeff'))
+    head = flux.readline()
+    if not head.strip():
+        raise ValueError('Le fichier de tarifs habitation est vide.')
     delimiter=';' if head.count(';')>=head.count(',') else ','
-    reader=csv.DictReader(io.StringIO(text),delimiter=delimiter)
+    flux.seek(0)
+    reader=csv.DictReader(flux,delimiter=delimiter)
     cols=reader.fieldnames or []
     dep=col(cols,'Département','departement','code département')
     cc=col(cols,'Code Commune','code_commune','code insee de la commune')
@@ -79,6 +84,11 @@ def parse_csv(text):
 
 @lru_cache(maxsize=1)
 def tarifs_nationaux():
+    cache = dossier_fiscal() / 'tarifs_habitation_2024.csv'
+    try:
+        return parse_csv(cache.read_text(encoding='utf-8-sig'))
+    except (OSError, ValueError):
+        pass
     fails=[]
     for url in (URL,URL_ALT,URL_MIROIR):
         try:
@@ -86,7 +96,12 @@ def tarifs_nationaux():
             r.raise_for_status()
             # N'acceptons pas une page HTML ou une réponse bloquée par un pare-feu
             if 'html' in r.headers.get('content-type','').lower():raise ValueError('HTML à la place du CSV')
-            return parse_csv(r.content.decode('utf-8-sig'))
+            tarifs = parse_csv(r.content.decode('utf-8-sig'))
+            try:
+                ecrire_atomiquement(cache, r.content)
+            except OSError as exc:
+                logging.getLogger(__name__).warning('Impossible de conserver les tarifs habitation : %s', exc)
+            return tarifs
         except (requests.RequestException,ValueError,UnicodeError) as ex:
             fails.append(type(ex).__name__)
     raise RuntimeError('Données tarifaires DGFiP 2024 momentanément inaccessibles via les trois serveurs. '+', '.join(fails))

@@ -9,7 +9,6 @@ import io
 import json
 import hashlib
 import os
-from pathlib import Path
 from datetime import datetime
 
 import streamlit as st
@@ -23,18 +22,12 @@ from imports_dgfip import (url_fichier, telecharger, importer, construire_source
 from cadastre import adresses, parcelles_a_l_adresse, rechercher_parcelle
 from referentiel import (DEPARTEMENTS, integrer_jeu, normaliser_departement,
                          publication_attendue, periode_neutralisation)
-from actualiser import preparer_proposition
+from actualiser import preparer_proposition, ACTIVE as LOCAL, BASE, PENDING
 from taux_dgfip import rechercher_taux, SOURCE as SOURCE_TAUX
 from historique_taux import (COMPOSANTES, LIBELLES, code_reference, enregistrer as sauver_taux,
                               supprimer as supprimer_taux, resoudre_tout, lignes_historique)
 from collecte_taux import preparer as proposer_taux
-from mise_a_jour_simple import synchroniser_dgfip, synchroniser_taux
-
-HERE=Path(__file__).resolve().parent
-BASE=HERE/'data'/'referentiel_initial.json'
-LOCAL=HERE/'data'/'referentiel_local.json'
-BACKUPS=HERE/'data'/'historique'
-PENDING=HERE/'data'/'en_attente'/'proposition.json'
+from mise_a_jour_simple import HISTORY as BACKUPS, synchroniser_dgfip, synchroniser_taux
 
 # Configuration centralisée par le routeur app.py
 st.markdown('''<style>

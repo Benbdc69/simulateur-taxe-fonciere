@@ -18,6 +18,15 @@ class MoteurTests(unittest.TestCase):
         self.assertEqual(secteur_automatique(REF,'42','ANDREZIEUX-BOUTHEON','','BI','42005')[0],4)
         self.assertEqual(localisation_automatique(REF,'42',2025,'ANDREZIEUX-BOUTHEON','','BI',242,'42005')[0],1.0)
         self.assertEqual(tarif_automatique(REF,'42',2025,'BUR2',4),131.3)
+    def test_bron_section_ign_zero_initial(self):
+        secteur, _ = secteur_automatique(REF, '69', 'BRON', '000', '0F', '69029')
+        self.assertEqual(secteur, 4)
+        self.assertEqual(tarif_automatique(REF, '69', 2025, 'CLI1', secteur), 199.3)
+        ref = {'localisations': {'69': {'2024': [
+            {'commune': 'BRON', 'code_commune': '029', 'section': 'F',
+             'parcelle': '1660', 'coefficient': 1.1},
+        ]}}}
+        self.assertEqual(localisation_automatique(ref, '69', 2025, 'BRON', '000', '0F', 1660, '69029')[0], 1.1)
     def test_regression_excel(self):
         neut,_=neutralisation_automatique(REF,'42','ANDREZIEUX-BOUTHEON')
         t={'commune':30.09,'syndicat':2.6,'epci':0,'taxes_speciales':0.224,'teom':8.3,'gemapi':0.779}

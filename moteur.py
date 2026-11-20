@@ -64,17 +64,22 @@ def _by_commune(rows, commune, code_commune=''):
     return [x for x in rows if norm(x.get('commune')) == n] if n else []
 
 
+def section_cadastrale(section):
+    section = norm(section)
+    return section[1:] if re.fullmatch(r'0[A-Z]', section) else section
+
+
 def secteur_automatique(ref, dep, commune, prefixe, section, code_commune=''):
     """N'identifie le secteur que si la section/préfixe conduit à une valeur unique."""
     rows = _by_commune(ref.get('secteurs', {}).get(dep, []), commune, code_commune)
     if not rows:
         return None, 'Commune absente du référentiel des secteurs.'
-    pref, sec = norm(prefixe), norm(section)
-    if not sec and any(norm(r.get('section')) for r in rows):
+    pref, sec = norm(prefixe), section_cadastrale(section)
+    if not sec and any(section_cadastrale(r.get('section')) for r in rows):
         return None, 'Indiquer la section cadastrale pour identifier le secteur.'
     candidates = []
     for r in rows:
-        rsec, rpref = norm(r.get('section')), norm(r.get('prefixe'))
+        rsec, rpref = section_cadastrale(r.get('section')), norm(r.get('prefixe'))
         if rsec and rsec != sec:
             continue
         if rpref and rpref != pref:
@@ -110,11 +115,11 @@ def localisation_automatique(ref, dep, year, commune, prefixe, section, parcelle
         return None, f'Fichier DGFiP de localisation {ay} absent : pas de report du barème précédent.', ay
     if not section or not parcelle:
         return None, 'Section et numéro de parcelle requis pour contrôler les coefficients particuliers.', ay
-    pref, sec, num = norm(prefixe), norm(section), parcel_code(parcelle)
+    pref, sec, num = norm(prefixe), section_cadastrale(section), parcel_code(parcelle)
     rows = _by_commune(d[str(ay)], commune, code_commune)
     matches = []
     for r in rows:
-        rsec, rpref, rnum = norm(r.get('section')), norm(r.get('prefixe')), parcel_code(r.get('parcelle'))
+        rsec, rpref, rnum = section_cadastrale(r.get('section')), norm(r.get('prefixe')), parcel_code(r.get('parcelle'))
         if rsec and rsec != sec:
             continue
         if rpref and rpref != pref:
