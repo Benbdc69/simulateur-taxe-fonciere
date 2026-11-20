@@ -56,7 +56,7 @@ class TestParcoursExpress(unittest.TestCase):
         self.assertEqual(len(result['result']['lignes']),6)
         self.assertGreater(result['result']['total_estime'],0)
 
-    def test_base_2016_planchonnement_et_lissage_millesimes(self):
+    def test_base_2016_planchonnement_sans_taux_historiques(self):
         ref = {
             'secteurs': {'69': [{'commune': 'LYON 7EME', 'secteur': 4}]},
             'tarifs': {'69': {'2017': {'BUR2': {'4': 200}}, '2025': {'BUR2': {'4': 300}},
@@ -70,8 +70,6 @@ class TestParcoursExpress(unittest.TestCase):
                 '2021+': [{'nom_commune': 'LYON 7EME', **dict.fromkeys(TAXES, .8)}],
             }},
         }
-        for cle in TAXES_AVANT_2021:
-            enregistrer(ref, '69123', 2017, cle, {'commune': 20, 'departement': 10}.get(cle, 0), 'Fixture')
         for annee in (2025, 2026):
             for cle in TAXES:
                 enregistrer(ref, '69123', annee, cle, 20 if cle == 'commune' else 0, 'Fixture')
@@ -80,27 +78,37 @@ class TestParcoursExpress(unittest.TestCase):
         ancien = calculer(*args, 2025, historique='ancien', base_2016=10000)
         self.assertEqual(ancien['reforme_2017']['base_ancienne_2017'], 10040)
         self.assertAlmostEqual(ancien['reforme_2017']['vl_revisee_2017'], 22000)
+        self.assertAlmostEqual(ancien['reforme_2017']['bases_neutralisees']['commune'], 8800)
         self.assertAlmostEqual(ancien['planchonnement']['corrections']['commune'], 620)
-        self.assertEqual(ancien['reforme_2017']['cotisations_2017'], {'avant': 3102.36, 'apres': 2514.23})
-        self.assertAlmostEqual(ancien['result']['correction_lissage'], 58.813)
-        self.assertAlmostEqual(ancien['result']['total_estime'], 2582.813)
+        self.assertEqual(ancien['result']['correction_lissage'], 0)
+        self.assertAlmostEqual(ancien['result']['total_estime'], 2524)
+        minoration = calculer(*args, 2026, historique='ancien', base_2016=5000)
+        self.assertAlmostEqual(minoration['planchonnement']['corrections']['commune'], -1890)
+        self.assertAlmostEqual(minoration['result']['total_estime'], 2022)
         frais = estimer_frais({l['cle']: l['montant'] for l in ancien['result']['lignes']}, 2025)
         pdf = creer_pdf_estimation({'annee': 2025, 'categorie': 'BUR2', 'bien': self.bien,
                                     'surfaces': {'P1': 100}, 'analyse': ancien, 'frais': frais})
         lecteur = PdfReader(BytesIO(pdf))
-        self.assertIn('2 659 €', lecteur.pages[0].extract_text())
-        self.assertIn('Correction de lissage', lecteur.pages[0].extract_text())
+        self.assertIn('2 600 €', lecteur.pages[0].extract_text())
+        texte = '\n'.join(page.extract_text() for page in lecteur.pages)
+        self.assertIn('Calcul du planchonnement', texte)
+        self.assertNotIn('lissage', texte.lower())
         self.assertAlmostEqual(calculer(*args, 2026, historique='ancien', base_2016=10000)['result']['total_estime'], 2524)
+        for cle in TAXES_AVANT_2021:
+            enregistrer(ref, '69123', 2017, cle, {'commune': 20, 'departement': 10}.get(cle, 0), 'Fixture')
         imposition_2017 = calculer(*args, 2017, historique='ancien', base_2016=10000)
         self.assertTrue(any(ligne['cle'] == 'departement' for ligne in imposition_2017['result']['lignes']))
         self.assertIsNone(calculer(*args, 2025, historique='recent', base_2016=10000)['reforme_2017'])
 
-        ref['taux_annuels']['69123']['2017'].pop('departement')
         ref['localisations']['69'].pop('2017')
-        incomplet = calculer(*args, 2025, historique='ancien', base_2016=10000)
+        enregistrer(ref, '69123', 2025, 'teom', 10, 'Fixture', remplacer=True)
+        incomplet = calculer(*args, 2025, historique='ancien', base_2016=10000, avec_replis=False)
         self.assertFalse(incomplet['planchonnement']['applique'])
-        self.assertIn('localisation 2017', incomplet['reforme_2017']['reserve_lissage'])
-        self.assertIn('départementale', incomplet['reforme_2017']['reserve_lissage'])
-        self.assertEqual(incomplet['result']['total_estime'], 2400)
+        indicatif = calculer(*args, 2025, historique='ancien', base_2016=10000)
+        self.assertAlmostEqual(indicatif['planchonnement']['corrections']['commune'], 1020)
+        self.assertAlmostEqual(indicatif['planchonnement']['corrections']['teom'], 1020)
+        self.assertIn('coefficient de droit commun de 1', indicatif['planchonnement']['reserve'])
+        self.assertIn('ordures ménagères', indicatif['planchonnement']['reserve'])
+        self.assertAlmostEqual(indicatif['result']['total_estime'], 3906)
 
 if __name__=='__main__': unittest.main()

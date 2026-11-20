@@ -34,7 +34,7 @@ def montant_pdf(valeur, suffixe=' €'):
 
 
 def synthese_pdf(annee, nature, adresse, reference, profil, lignes, sous_total, frais,
-                 valeur_locative=None, reserve='', *, lissage=None):
+                 valeur_locative=None, reserve=''):
     def paragraphe(texte, taille=10, couleur=ENCRE, gras=False, alignement=0):
         style = ParagraphStyle('Synthese', fontName=GRASSE if gras else NORMALE,
                                fontSize=taille, leading=taille * 1.3, textColor=couleur,
@@ -43,11 +43,9 @@ def synthese_pdf(annee, nature, adresse, reference, profil, lignes, sous_total, 
 
     total = frais.get('total') if frais else None
     if total is not None:
-        total += lissage or 0
         montant, libelle = total, 'Total estimé, frais de gestion inclus'
     elif sous_total is not None:
-        montant = sous_total + (lissage or 0)
-        libelle = 'Cotisations estimées après lissage' if lissage is not None else 'Cotisations estimées hors frais'
+        montant, libelle = sous_total, 'Cotisations estimées hors frais'
     elif valeur_locative is not None:
         montant, libelle = valeur_locative, 'Valeur locative estimée'
     else:
@@ -81,8 +79,6 @@ def synthese_pdf(annee, nature, adresse, reference, profil, lignes, sous_total, 
     tableau.append(['Sous-total des cotisations', '', '', montant_pdf(sous_total)])
     libelle_frais = 'Frais de gestion estimés' if not frais or total is not None else 'Frais de gestion calculables'
     tableau.append([libelle_frais, '', '', montant_pdf(frais.get('frais') if frais else None)])
-    if lissage is not None and sous_total is not None:
-        tableau.append(['Correction de lissage', '', '', montant_pdf(lissage)])
     tableau.append(['Total estimé avec frais', '', '', euro_arrondi(total) if total is not None else '—'])
     tab = Table(tableau, colWidths=[7.6 * cm, 3.1 * cm, 2.5 * cm, 3.7 * cm], hAlign='LEFT')
     tab.setStyle(TableStyle([

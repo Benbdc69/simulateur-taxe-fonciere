@@ -14,7 +14,7 @@ from recherche_bien import saisir_reference, identifier_par_reference, libelle_p
 from moteur import (COEFF_SURFACES, TAXES, TAXES_AVANT_2021, insee_cadastral_adresse,
                     nom_commune_cadastrale, secteur_automatique,
                     localisation_automatique, neutralisation_avec_teom_reference,
-                    neutralisation_automatique, tarif_automatique, estimation, lissage_2017_2025)
+                    neutralisation_automatique, tarif_automatique, estimation)
 from historique_taux import resoudre, resoudre_tout
 from actualiser import BASE
 from mise_a_jour_simple import (ouvrir_referentiel as lire_ref, synchroniser_dgfip, synchroniser_taux,
@@ -50,8 +50,8 @@ def normaliser_identite(parcelle, adresse, ref):
 
 def calculer_dossier(ref, ref_initial, bien, categorie, surfaces, annee, construction_nouvelle=False,
                     annee_achevement=None, historique="inconnu", corrections_planchonnement=None,
-                    *, base_2016=None, localisation_2017=None, montant_lissage=None):
-    """Calcule l’estimation et, si la base 2016 est fournie, les correctifs historiques."""
+                    *, base_2016=None, localisation_2017=None, avec_replis=True):
+    """Calcule l’estimation et le planchonnement à partir de la base 2016."""
     exo = exon_neuf_non_habitation(annee, annee_achevement, construction_nouvelle)
     reconstitution = historique == 'ancien' and base_2016 is not None and 2017 <= annee <= 2026
     taxes = TAXES_AVANT_2021 if reconstitution and annee < 2021 else TAXES
@@ -59,8 +59,6 @@ def calculer_dossier(ref, ref_initial, bien, categorie, surfaces, annee, constru
     sect, sec_message = secteur_automatique(ref, dep, com, bien['prefixe'], bien['section'], code)
     loc, loc_message, loc_year = localisation_automatique(
         ref, dep, annee, com, bien['prefixe'], bien['section'], bien['numero'], code)
-    if reconstitution and annee == 2017 and localisation_2017 is not None:
-        loc, loc_message = localisation_2017, 'Coefficient 2017 saisi d’après la fiche cadastrale.'
     tarif = tarif_automatique(ref, dep, annee, categorie, sect)
     neutral, neutral_message, neutral_warnings = neutralisation_avec_teom_reference(
         ref, ref_initial, dep, com, annee, code, bien['prefixe'])
@@ -74,7 +72,6 @@ def calculer_dossier(ref, ref_initial, bien, categorie, surfaces, annee, constru
                  if not rates[cle] or rates[cle]['taux'] != 0 or (neutral or {}).get(cle)}
     missing = []
     if sect is None: missing.append('secteur d’évaluation')
-    if loc is None: missing.append('coefficient de localisation')
     if tarif is None: missing.append('tarif de la catégorie / secteur / année')
     coeffs = {}
     taux = {}
@@ -84,38 +81,34 @@ def calculer_dossier(ref, ref_initial, bien, categorie, surfaces, annee, constru
         if coeffs[key] is None: missing.append('neutralisation : ' + label)
         if taux[key] is None: missing.append('taux : ' + label)
     weighted = sum(float(surfaces.get(k,0)) * w for k,w in COEFF_SURFACES.items())
-    partial = {'surface_ponderee': weighted, 'secteur': sect, 'tarif': tarif, 'localisation': loc,
-               'valeur_locative_brute':weighted * float(tarif) * float(loc) if tarif is not None and loc is not None else None}
     result = None
     reforme = None
-    lissage = None
     corrections = corrections_planchonnement or {}
     if reconstitution:
         reforme = reconstituer_reforme(
             ref, bien, categorie, weighted, annee, base_2016, taux, corrections,
-            localisation_2017=localisation_2017, montant_lissage=montant_lissage)
-        lissage = reforme['lissage']
+            localisation_2017=localisation_2017, coefficients_actuels=coeffs, avec_replis=avec_replis)
         planch = preparer_planchonnement(annee, historique, reforme['corrections'], taxes=taxes)
         planch['complet'] = not reforme['planchonnement_manquant']
-        planch['reserve'] = (
-            'Planchonnement non calculé pour ' + ', '.join(reforme['planchonnement_manquant']) + '.'
-            if reforme['planchonnement_manquant'] else None)
+        reserves = list(reforme['hypotheses'])
+        if reforme['planchonnement_manquant']:
+            reserves.append('Planchonnement non calculé pour ' + ', '.join(reforme['planchonnement_manquant']) + '.')
+        if reforme['parametres_manquants']:
+            reserves.append('Données historiques manquantes · ' + ', '.join(reforme['parametres_manquants']) + '.')
+        planch['reserve'] = ' '.join(reserves) or None
+        if annee == 2017:
+            loc, loc_message = reforme['localisation_2017'], reforme['message_localisation']
     else:
         planch = preparer_planchonnement(annee, historique, corrections)
-        if historique == 'ancien' and 2017 <= annee <= 2025 and montant_lissage is not None:
-            lissage = lissage_2017_2025(annee, montant_avis=montant_lissage)
-    if reconstitution and lissage is None:
-        details = list(reforme['parametres_manquants'])
-        if reforme['taux_manquants']:
-            details.append('taux 2017 pour ' + ', '.join(reforme['taux_manquants']))
-        reforme['reserve_lissage'] = 'Estimation hors lissage. Données manquantes : ' + ' · '.join(details) + '.'
+    if loc is None: missing.append('coefficient de localisation')
+    partial = {'surface_ponderee': weighted, 'secteur': sect, 'tarif': tarif, 'localisation': loc,
+               'valeur_locative_brute': weighted * tarif * loc if tarif is not None and loc is not None else None}
     if weighted <= 0: missing.append('surface du local')
     if not missing:
         result = estimation(surfaces, tarif, loc, coeffs, taux, abattements=exo['taux'],
-                            planchonnements=planch['corrections'],
-                            correction_lissage=lissage['montant'] if lissage else 0, taxes=taxes)
+                            planchonnements=planch['corrections'], taxes=taxes)
     return {'result':result,'partial':partial,'missing':missing,'taux':rates,'exoneration_neuf':exo,'planchonnement':planch,
-            'neutralisations':neutral,'neutral_warnings':neutral_warnings, 'reforme_2017':reforme, 'lissage':lissage,
+            'neutralisations':neutral,'neutral_warnings':neutral_warnings, 'reforme_2017':reforme,
             'messages':{'secteur':sec_message,'localisation':loc_message,
                         'neutralisation':neutral_message,'localisation_annee':loc_year}}
 
@@ -151,29 +144,31 @@ def actualiser_si_necessaire(annee, bien, *, valeurs=True, taux=True, taux_histo
 
 
 def finaliser(candidat, categorie, surfaces, annee, construction_nouvelle=False, annee_achevement=None,
-              historique="inconnu", corrections_planchonnement=None, **donnees_historiques):
+              historique="inconnu", corrections_planchonnement=None, *, base_2016=None,
+              localisation_2017=None):
     adresse_result, parcelle = candidat
     ref = lire_ref()
     bien = normaliser_identite(parcelle, adresse_result, ref)
     initial = json.loads(BASE.read_text(encoding='utf-8'))
     with st.spinner('Calcul à partir des barèmes et taux disponibles…'):
-        def calculer(ref_actif):
+        def calculer(ref_actif, *, avec_replis=False):
             return calculer_dossier(ref_actif, initial, bien, categorie, surfaces, annee,
                                    construction_nouvelle, annee_achevement, historique,
-                                   corrections_planchonnement, **donnees_historiques)
+                                   corrections_planchonnement, base_2016=base_2016,
+                                   localisation_2017=localisation_2017, avec_replis=avec_replis)
 
         res = calculer(ref)
         issues, actualise = [], False
         if not res['result'] or any(t and t['annee_source'] < annee for t in res['taux'].values()):
             issues = actualiser_si_necessaire(annee, bien, taux_historiques=bool(res['reforme_2017']) and annee < 2021)
-            res, actualise = calculer(lire_ref()), True
+            ref, actualise = lire_ref(), True
+            res = calculer(ref)
         reforme = res['reforme_2017']
-        if reforme and not (annee == 2017 and actualise):
-            valeurs = bool(reforme['parametres_manquants'] or reforme['planchonnement_manquant'])
-            taux = bool(reforme['taux_manquants'])
-            if valeurs or taux:
-                issues.extend(actualiser_si_necessaire(2017, bien, valeurs=valeurs, taux=taux, taux_historiques=True))
-                res = calculer(lire_ref())
+        if reforme and (reforme['parametres_manquants'] or reforme['planchonnement_manquant']):
+            if annee != 2017 or not actualise:
+                issues.extend(actualiser_si_necessaire(2017, bien, taux=False))
+                ref = lire_ref()
+            res = calculer(ref, avec_replis=True)
     st.session_state['_calcul_express']={
         'bien':bien,'adresse':adresse_result['libelle'], 'adresse_declaree':adresse_result,
         'categorie':categorie,'annee':annee, 'construction_nouvelle':construction_nouvelle, 'annee_achevement':annee_achevement,
@@ -261,31 +256,28 @@ def afficher_saisie():
             help='Répondez pour le local lui-même, indépendamment de sa date d’achat ou de création de votre société. En cas de doute, conservez « Je ne sais pas ». Nécessaire uniquement pour l’éventuel planchonnement de 2017 à 2026. Un changement de consistance ou d’affectation peut modifier le régime.',
         )
         corrections_brutes = {}
-        base_brute = localisation_brute = lissage_brut = ''
+        base_brute = localisation_brute = ''
         if historique == 'ancien' and 2017 <= annee <= 2026:
             base_brute = st.text_input(
                 'Base TFPB du local figurant sur l’avis 2016 (€)',
-                key=cle_calcul('express_base_2016'), placeholder='Facultatif',
+                key=cle_calcul('express_base_2016'), placeholder='Montant de la base en euros',
                 help='Reprenez la base du local dans la colonne « Commune », déjà réduite de 50 %. '
                      'Si l’avis regroupe des biens ou si le local était exonéré, utilisez la base nette '
                      'propre au local figurant sur sa fiche cadastrale. Le calcul suppose que les '
                      'surfaces et le classement saisis correspondent à la situation de 2017.')
-            with st.expander('Données historiques connues sur votre avis ou votre fiche cadastrale'):
-                st.caption('Facultatif. Les corrections signées de l’année saisies ici prévalent sur la reconstitution.')
+            st.caption('Ce montant suffit pour lancer le calcul automatique du planchonnement.')
+            with st.expander('Corriger le calcul avec votre fiche cadastrale (facultatif)'):
+                st.caption('Les montants justifiés saisis ici remplacent les corrections calculées.')
                 if base_brute.strip():
                     localisation_brute = st.text_input(
                         'Coefficient de localisation de 2017', key=cle_calcul('express_loc_2017'),
                         placeholder='Si connu', help='Valeur relevée sur la fiche cadastrale pour 2017.')
-                if annee <= 2025:
-                    lissage_brut = st.text_input(
-                        'Montant signé du lissage sur l’avis de l’année simulée (€)',
-                        key=cle_calcul(f'express_lissage_avis_{annee}'), placeholder='Si connu')
                 cols_plan = st.columns(2)
                 plan_taxes = TAXES_AVANT_2021 if annee < 2021 and base_brute.strip() else TAXES
                 for i,(cle,libelle) in enumerate(plan_taxes.items()):
                     with cols_plan[i % 2]:
                         corrections_brutes[cle] = st.text_input(libelle+' · correction de base (€)', value='', key=cle_calcul(f'plan_{cle}_{annee}'), placeholder='ex. -125,50', help='Montant signé de correction de base imposable pour cette taxe et cette année, justifié par votre fiche fiscale. Vide = inconnu ; 0 = correction nulle confirmée. Ce champ ne reçoit ni le montant de taxe payé ni un taux.')
-        signature=json.dumps([mode_recherche,reference,adresse,adresse_selectionnee,categorie,surfaces,annee,construction_nouvelle,annee_achevement,historique,corrections_brutes,base_brute,localisation_brute,lissage_brut],sort_keys=True)
+        signature=json.dumps([mode_recherche,reference,adresse,adresse_selectionnee,categorie,surfaces,annee,construction_nouvelle,annee_achevement,historique,corrections_brutes,base_brute,localisation_brute],sort_keys=True)
         if st.session_state.get('_express_saisie') != signature:
             st.session_state.pop('_calcul_express',None)
             st.session_state.pop('_parcelles_attente',None)
@@ -313,7 +305,6 @@ def afficher_saisie():
                     raise ValueError('Le coefficient de localisation 2017 doit être compris entre 0,5 et 1,5.')
                 donnees_historiques = {
                     'base_2016': base_2016, 'localisation_2017': localisation_2017,
-                    'montant_lissage': montant_facultatif(lissage_brut, 'Montant de lissage'),
                 }
             except ValueError as exc:
                 st.error(str(exc))
@@ -375,7 +366,8 @@ def afficher_saisie():
             if st.button('Obtenir le résultat',type='primary',use_container_width=True,disabled=selection is None):
                 try:
                     finaliser(candidats[selection],pending['categorie'],pending['surfaces'],pending['annee'],pending.get('construction_nouvelle',False),pending.get('annee_achevement'),pending.get('historique','inconnu'),pending.get('corrections_planchonnement',{}),
-                              **pending.get('donnees_historiques', {}))
+                              base_2016=pending.get('donnees_historiques', {}).get('base_2016'),
+                              localisation_2017=pending.get('donnees_historiques', {}).get('localisation_2017'))
                     st.rerun()
                 except Exception as exc:
                     st.error('Le calcul n’a pas pu être finalisé : '+str(exc))
@@ -392,8 +384,6 @@ else:
     st.title('Votre estimation')
     analyse=calcule['analyse']; result=analyse['result']; partial=analyse['partial']
     reforme = analyse.get('reforme_2017')
-    lissage = analyse.get('lissage')
-    correction_lissage = result.get('correction_lissage', 0) if result else 0
     st.caption(f"Local professionnel · {calcule['adresse']} · {calcule['annee']} · {calcule['categorie']}")
     bien = calcule['bien']
     st.caption(f"Parcelle {bien['section']} {bien['numero']} · {bien['commune']}")
@@ -408,24 +398,21 @@ else:
         if result:
             total = frais.get('total') if frais else None
             if total is not None:
-                st.metric('Taxe foncière estimée, frais inclus', euro_arrondi(total + correction_lissage))
+                st.metric('Taxe foncière estimée, frais inclus', euro_arrondi(total))
                 st.caption(f"Cotisations hors frais {euro(result['total_hors_frais'])} · Frais {euro(frais['frais'])}")
                 if 'taxes_speciales' in frais['lignes']:
                     st.caption(f"Frais sur les taxes spéciales estimés à {frais['lignes']['taxes_speciales']['taux']} %.")
             else:
-                libelle = 'Taxe foncière estimée après lissage' if correction_lissage else 'Taxe foncière estimée hors frais'
-                st.metric(libelle, euro_arrondi(result['total_estime']))
-            if lissage and calcule['annee'] <= 2025:
-                st.caption(f"Correction de lissage {euro(correction_lissage)}")
+                st.metric('Taxe foncière estimée hors frais', euro_arrondi(result['total_hors_frais']))
         else:
             if partial['valeur_locative_brute'] is not None:
                 st.metric('Valeur locative brute estimée', euro_arrondi(partial['valeur_locative_brute']))
             st.warning('Cotisations indisponibles. Données manquantes : '+', '.join(analyse['missing']))
         planch = analyse.get('planchonnement', {})
+        if result and planch.get('applique'):
+            st.caption('Planchonnement intégré à l’estimation.')
         if planch.get('reserve'):
             st.warning(planch['reserve'])
-        if reforme and reforme.get('reserve_lissage'):
-            st.warning(reforme['reserve_lissage'])
     rapport.download_button(
         'Télécharger mon estimation en PDF',
         data=creer_pdf_estimation({**calcule, 'frais': frais}),
@@ -442,7 +429,7 @@ else:
                        'Taux': pct(ligne['taux_pct']), 'Cotisation': euro(ligne['montant'])}
                       for ligne in result['lignes']])
         if reforme:
-            st.markdown('**Réforme de 2017**')
+            st.markdown('**Calcul du planchonnement**')
             st.write(f"Base TFPB 2016 de {euro(reforme['base_2016'])} × 1,004 = ancienne base 2017 de "
                      f"{euro(reforme['base_ancienne_2017'])}.")
             if reforme['vl_revisee_2017'] is not None:
@@ -450,25 +437,16 @@ else:
                          f"pour un tarif de {euro(reforme['tarif_2017'])}/m² et un coefficient de "
                          f"localisation de {reforme['localisation_2017']:g}.")
             if planch['corrections']:
-                st.table([{'Taxe': TAXES_AVANT_2021[cle], 'Correction de base': euro(montant)}
-                          for cle, montant in planch['corrections'].items()])
-            if reforme['cotisations_2017']:
-                cotisations = reforme['cotisations_2017']
-                st.write(f"Cotisations 2017, frais compris, de {euro(cotisations['avant'])} selon "
-                         f"l’ancienne base et {euro(cotisations['apres'])} après réforme.")
-            for hypothese in reforme['hypotheses_lissage']:
-                st.caption(hypothese)
-            if reforme['parametres_manquants']:
-                st.caption('Données de 2017 manquantes · ' + ', '.join(reforme['parametres_manquants']))
+                st.caption('Correction de base = (ancienne base 2017 − base révisée neutralisée de 2017) ÷ 2.')
+                bases = reforme.get('bases_neutralisees', {})
+                st.table([
+                    {'Taxe': TAXES_AVANT_2021[cle],
+                     'Base révisée neutralisée 2017': euro(bases[cle]) if cle in bases else '—',
+                     'Correction de base': euro(montant)}
+                    for cle, montant in planch['corrections'].items()
+                ])
             st.caption('Le calcul suppose que les surfaces et le classement saisis correspondent à 2017.')
             st.markdown('[Barèmes départementaux de la DGFiP](https://www.impots.gouv.fr/revision-des-valeurs-locatives)')
-            if reforme['taux_2017']:
-                st.table([{'Taxe': TAXES_AVANT_2021[cle], 'Taux 2017': pct(rec['taux']), 'Source': rec['source']}
-                          for cle, rec in reforme['taux_2017'].items()])
-        if lissage and calcule['annee'] <= 2025:
-            st.caption(f"Correction de lissage de {euro(lissage['montant'])} · {lissage['mode']}.")
-        elif calcule['annee'] <= 2025 and calcule.get('historique') != 'recent' and not reforme:
-            st.caption('Estimation hors lissage éventuel.')
         exo = analyse.get('exoneration_neuf', {})
         if exo.get('active'):
             st.caption('Construction nouvelle : exonération de 40 % appliquée aux composantes éligibles.')

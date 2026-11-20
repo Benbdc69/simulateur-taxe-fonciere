@@ -36,6 +36,8 @@ class ParcoursGuidesUI(unittest.TestCase):
         historique = 'Le local existait-il comme local professionnel au 1er janvier 2017 ?'
         champ(at.selectbox, historique).select('ancien').run()
         self.assertIn(label, [x.label for x in at.text_input])
+        champ(at.number_input, 'Année d’imposition').set_value(2025).run()
+        self.assertFalse(any('lissage' in x.label.lower() for x in at.text_input))
         self.assertEqual(len([x for x in at.text_input if 'correction de base' in x.label]), 6)
         champ(at.selectbox, historique).select('recent').run()
         self.assertNotIn(label, [x.label for x in at.text_input])

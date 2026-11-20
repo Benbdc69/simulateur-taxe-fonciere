@@ -35,7 +35,6 @@ def creer_pdf_estimation(dossier):
     result = analyse.get('result')
     frais = dossier.get('frais')
     reforme = analyse.get('reforme_2017')
-    lissage = analyse.get('lissage')
     planch = analyse.get('planchonnement', {})
     partial = analyse['partial']
     bien = dossier['bien']
@@ -52,8 +51,7 @@ def creer_pdf_estimation(dossier):
     lignes = [(ligne['taxe'], ligne['base_taxable'], ligne['taux_pct'], ligne['montant'])
               for ligne in (result or {}).get('lignes', ())]
     parcelle = ' '.join(str(bien.get(cle) or '') for cle in ('prefixe', 'section', 'numero')).strip()
-    reserves = [planch.get('reserve'), reforme.get('reserve_lissage') if reforme else None]
-    reserve = ' '.join(r for r in reserves if r) or 'Estimation sous réserve des paramètres cadastraux et des régimes particuliers.'
+    reserve = planch.get('reserve') or 'Estimation sous réserve des paramètres cadastraux et des régimes particuliers.'
     story = synthese_pdf(
         dossier['annee'], 'Local professionnel', dossier.get('adresse'),
         f"Parcelle {parcelle} · INSEE {bien.get('code_insee', '—')}",
@@ -62,7 +60,6 @@ def creer_pdf_estimation(dossier):
         partial.get('valeur_locative_brute'),
         'Cotisations indisponibles : les paramètres fiscaux requis sont détaillés en annexe.'
         if not result else reserve,
-        lissage=lissage['montant'] if lissage and dossier['annee'] <= 2025 else None,
     )
     story.extend([PageBreak(), Paragraph('Annexe — détail du calcul', styles['TitreTF'])])
     exo = analyse.get('exoneration_neuf', {})
@@ -77,7 +74,7 @@ def creer_pdf_estimation(dossier):
                             ' EUR/m² ; coefficient de localisation : '+_nombre(partial.get('localisation'),4), styles['PetitTF']),
                   Paragraph('Valeur locative brute : '+_nombre(partial.get('valeur_locative_brute'))+' EUR',styles['PetitTF'])])
     if reforme:
-        story.append(Paragraph('Réforme de 2017', styles['Heading3']))
+        story.append(Paragraph('Calcul du planchonnement', styles['Heading3']))
         story.append(Paragraph(
             f"Base TFPB 2016 de {_nombre(reforme['base_2016'])} EUR x 1,004 = "
             f"<b>ancienne base 2017 de {_nombre(reforme['base_ancienne_2017'])} EUR</b>.",
@@ -88,30 +85,18 @@ def creer_pdf_estimation(dossier):
                 f"de {_nombre(reforme['localisation_2017'], 2)} appliqués à la surface pondérée, soit une "
                 f"<b>valeur locative révisée 2017 de {_nombre(reforme['vl_revisee_2017'])} EUR</b>.",
                 styles['PetitTF']))
-        if reforme['cotisations_2017']:
-            cotisations = reforme['cotisations_2017']
-            story.append(Paragraph(
-                f"Cotisations 2017, frais compris, de {_nombre(cotisations['avant'])} EUR selon "
-                f"l’ancienne base et de {_nombre(cotisations['apres'])} EUR après réforme.",
-                styles['PetitTF']))
-        for hypothese in reforme['hypotheses_lissage']:
-            story.append(Paragraph(_texte(hypothese), styles['PetitTF']))
-        if reforme['parametres_manquants']:
-            story.append(Paragraph('Données 2017 manquantes · '+_texte(', '.join(reforme['parametres_manquants'])),
-                                   styles['PetitTF']))
-        if reforme.get('reserve_lissage'):
-            story.append(Paragraph(_texte(reforme['reserve_lissage']), styles['PetitTF']))
         story.append(Paragraph(
             'Le calcul suppose que les surfaces et le classement saisis correspondent à 2017. '
             '<link href="https://www.impots.gouv.fr/revision-des-valeurs-locatives">Barèmes départementaux de la DGFiP</link>.',
             styles['PetitTF']))
-    if lissage and dossier['annee'] <= 2025:
-        story.append(Paragraph(f"Correction de lissage de <b>{_nombre(lissage['montant'])} EUR</b> "
-                               f"({_texte(lissage['mode'])}).", styles['PetitTF']))
     if planch.get('applique'):
         story.append(Paragraph('<b>Planchonnement pris en compte</b>', styles['Heading3']))
+        bases = (reforme or {}).get('bases_neutralisees', {})
         for cle, val in planch.get('corrections', {}).items():
-            story.append(Paragraph(_texte(TAXES_AVANT_2021[cle])+' · correction de base '+_nombre(val)+' EUR', styles['PetitTF']))
+            bases_2017 = (f" · ({_nombre(reforme['base_ancienne_2017'])} EUR − {_nombre(bases[cle])} EUR) ÷ 2"
+                          if cle in bases else '')
+            story.append(Paragraph(_texte(TAXES_AVANT_2021[cle])+bases_2017
+                                   +' · correction de base '+_nombre(val)+' EUR', styles['PetitTF']))
     if planch.get('reserve'):
         story.append(Paragraph('<b>Réserve relative au planchonnement :</b> '+_texte(planch['reserve']), styles['PetitTF']))
     out_of_date=[f"{key} ({rate['annee_source']})" for key,rate in analyse.get('taux',{}).items()
@@ -122,8 +107,7 @@ def creer_pdf_estimation(dossier):
         story.append(Paragraph('Certaines neutralisations historiques ont été reprises à titre provisoire.',styles['PetitTF']))
     story.append(Spacer(1, 12))
     story.append(Paragraph('<b>Réserves importantes</b>',styles['Heading3']))
-    story.append(Paragraph('Estimation hors exonérations particulières et corrections historiques non documentées. '
-                           'Pour un local existant avant 2017, le planchonnement et, jusqu’en 2025, le lissage peuvent modifier sensiblement la cotisation. '
+    story.append(Paragraph('Estimation hors exonérations particulières. '
                            'Les taux repris d’années antérieures et les zones TEOM doivent être vérifiés. Pour une construction nouvelle, l’exonération de l’article 1383 II du CGI suppose le respect des formalités déclaratives (90 jours).',styles['PetitTF']))
     story.append(Paragraph('1. Pondération des surfaces', styles['Heading3']))
     coefficients = {'P1': 1.0, 'P2': 0.5, 'P3': 0.2, 'PK1': 0.5, 'PK2': 0.2}
@@ -172,10 +156,6 @@ def creer_pdf_estimation(dossier):
             cb.append(Paragraph('Base taxable '+_nombre(line.get('base_taxable'))+' EUR x taux '+_nombre(line.get('taux_pct'))+' % = cotisation <b>'+_nombre(line.get('montant'))+' EUR</b>.',styles['PetitTF']))
             story.append(KeepTogether(cb+[Spacer(1,5)]))
         story.append(Paragraph('<b>Total des composantes avant frais : '+_nombre(result.get('total_hors_frais'))+' EUR</b>.', styles['CorpsTF']))
-        if result.get('correction_lissage') or result.get('frais_gestion_estimes'):
-            story.append(Paragraph('Ajustements du moteur : frais saisis '+_nombre(result.get('frais_gestion_estimes'))
-                                   +' EUR, lissage '+_nombre(result.get('correction_lissage'))
-                                   +' EUR, total '+_nombre(result.get('total_estime'))+' EUR.', styles['CorpsTF']))
         story.append(Paragraph('Les opérations sont effectuées par le moteur avec les valeurs numériques non arrondies ; le présent rapport arrondit leur affichage à deux décimales. Une correction de planchonnement affichée à zéro ne démontre pas qu’aucun planchonnement n’est applicable.',styles['PetitTF']))
     else:
         story.append(Paragraph('Aucune cotisation détaillée ne peut être affichée : les taux, tarifs, neutralisations ou autres paramètres requis sont incomplets.',styles['PetitTF']))
