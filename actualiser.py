@@ -13,8 +13,9 @@ import hashlib
 import json
 import sys
 from datetime import datetime, timezone
+from requests import HTTPError
 from stockage_fiscal import DONNEES_LIVREES, dossier_fiscal, ecrire_atomiquement
-from imports_dgfip import url_fichier, telecharger, importer, construire_source
+from imports_dgfip import url_fichier, url_archive_2017, telecharger, importer, construire_source
 from referentiel import (DEPARTEMENTS, normaliser_departement,
                          publication_attendue, integrer_jeu)
 
@@ -49,7 +50,17 @@ def preparer_proposition(annee,deps, *, fetch=telecharger, parse=importer):
             if nature=='neutralisations':
                 source_id=f'{dep}/neutralisations/{2021 if millesime>=2021 else 2017}'
             try:
-                blob=fetch(url)
+                try:
+                    blob=fetch(url)
+                except HTTPError as exc:
+                    if (millesime != 2017 or nature not in ('tarifs', 'localisations')
+                            or exc.response is None or exc.response.status_code not in (404, 410)):
+                        raise
+                    archive = url_archive_2017(dep, nature)
+                    if not archive or archive == url:
+                        raise
+                    url = archive
+                    blob = fetch(url)
                 parsed,sha=parse(blob,url,nature)
                 prior=base.get('sources',{}).get(source_id,{})
                 if prior.get('sha256')==sha:

@@ -85,3 +85,18 @@ def synchroniser_taux(annee,code_insee, *, preparer=proposer_taux):
     if changed:enregistrer_referentiel(ref,expected_sha256=start)
     return {'ajoutes':changed,'deja_presents':existing,'incidents':proposal.get('incidents',[]),
             'sources':proposal.get('sources_consultees',[])}
+
+
+def synchroniser_taux_historiques(annee, code_insee):
+    from taux_historiques_tf import rechercher_taux_historiques
+
+    def preparer(code, millesime):
+        taux = rechercher_taux_historiques(code, millesime)
+        return {
+            'propositions': {cle: {'annee': millesime, 'taux': valeur,
+                                  'source': f'DGFiP / REI {millesime}', 'url': url}
+                             for cle, (valeur, url) in taux.items()},
+            'incidents': [] if taux else [f'Taux REI {millesime} indisponibles pour {code}.'],
+        }
+
+    return synchroniser_taux(annee, code_insee, preparer=preparer)

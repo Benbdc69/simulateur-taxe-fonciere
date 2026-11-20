@@ -4,6 +4,8 @@ import re
 import hashlib
 import zipfile
 from datetime import datetime, timezone
+from html.parser import HTMLParser
+from urllib.parse import unquote, urljoin, urlsplit
 from xml.etree import ElementTree as ET
 import requests
 from moteur import norm, parcel_code, comm_code
@@ -26,6 +28,31 @@ def url_fichier(departement, type_donnee, annee):
         chemin = 'coef-neut-ap21' if int(annee) >= 2021 else 'coef-neut'
         return f'{DOMAIN}/{chemin}/{chemin}-{dep}.ods'
     raise ValueError('Type inconnu')
+
+
+def url_archive_2017(departement, nature, *, session=requests):
+    """Repère un classeur millésimé sur la page DGFiP si le chemin direct a changé."""
+    dep = normaliser_departement(departement).lower()
+    prefixe = {'tarifs': 'tarif', 'localisations': 'coef-loc'}[nature]
+    nom = re.compile(rf'{prefixe}[-_]{dep}(?:[-_]2017)?(?:_\d+)?\.(?:ods|xlsx)$', re.I)
+    urls = set()
+
+    class Liens(HTMLParser):
+        def handle_starttag(self, tag, attrs):
+            href = dict(attrs).get('href') if tag == 'a' else None
+            if href:
+                url = urljoin(PAGE, href)
+                adresse = urlsplit(url)
+                chemin = unquote(adresse.path)
+                if (adresse.scheme == 'https' and adresse.hostname in {'www.impots.gouv.fr', 'impots.gouv.fr'}
+                        and re.search(r'(?<!\d)2017(?!\d)', chemin)
+                        and nom.fullmatch(chemin.rsplit('/', 1)[-1])):
+                    urls.add(url)
+
+    reponse = session.get(PAGE, timeout=(6, 12))
+    reponse.raise_for_status()
+    Liens().feed(reponse.text)
+    return next(iter(urls)) if len(urls) == 1 else None
 
 
 def telecharger(url):

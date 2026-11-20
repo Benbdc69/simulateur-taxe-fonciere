@@ -16,6 +16,7 @@ TAXES = {
     'teom': 'Taxe d’enlèvement des ordures ménagères',
     'gemapi': 'GEMAPI',
 }
+TAXES_AVANT_2021 = {**TAXES, 'departement': 'Taxe foncière départementale'}
 
 
 def norm(text):
@@ -103,13 +104,15 @@ def annee_localisation(year):
         return 2024
     if y >= 2020:
         return 2020
+    if y >= 2017:
+        return y
     return None
 
 
 def localisation_automatique(ref, dep, year, commune, prefixe, section, parcelle, code_commune=''):
     ay = annee_localisation(year)
     if ay is None:
-        return None, 'Millésime de localisation antérieur à 2020 non chargé.', None
+        return None, 'Millésime de localisation antérieur à 2017.', None
     d = ref.get('localisations', {}).get(dep, {})
     if str(ay) not in d:
         return None, f'Fichier DGFiP de localisation {ay} absent : pas de report du barème précédent.', ay
@@ -242,7 +245,7 @@ def _choisir_neutralisation(rows, *, dep, commune, code_commune='', prefixe=''):
     return [], ''
 
 
-def neutralisation_automatique(ref, dep, commune, annee=2025, code_commune='', prefixe=''):
+def neutralisation_automatique(ref, dep, commune, annee=2025, code_commune='', prefixe='', *, taxes=TAXES):
     """Rapproche les coefficients 2017-2020 / 2021+ sans supposer de valeurs.
 
     Les noms Lyon 7e, Lyon 7ème, Lyon 7e Arrondissement et LYON 07 sont
@@ -256,8 +259,9 @@ def neutralisation_automatique(ref, dep, commune, annee=2025, code_commune='', p
                       f'(code cadastral {code_commune or "non indiqué"}). '
                       'Vérifier les coefficients importés et leurs codes communaux.')
     vals = {}
-    for k in TAXES:
-        values = {round(float(r[k]), 12) for r in matchs if r.get(k) is not None}
+    for k in taxes:
+        champ = 'coef_departement' if k == 'departement' else k
+        values = {round(float(r[champ]), 12) for r in matchs if r.get(champ) is not None}
         if len(values)>1:
             return None, f'Coefficients TF {period} contradictoires pour {commune} ({k}).'
         vals[k]=next(iter(values)) if values else None
@@ -446,7 +450,7 @@ def lissage_2017_2025(annee, *, cotisation_avant_reforme_2017=None,
             'pas_annuel':pas,'mode':mode}
 
 
-def estimation(surfaces, tarif, coefficient_localisation, coeff_neutralisations, taux, abattements=None, planchonnements=None, frais_pct=0, correction_lissage=0.0):
+def estimation(surfaces, tarif, coefficient_localisation, coeff_neutralisations, taux, abattements=None, planchonnements=None, frais_pct=0, correction_lissage=0.0, *, taxes=TAXES):
     """Retourne toutes les étapes, ou lève ValueError pour un paramètre manquant/invalide.
 
     * VL brute = surface pondérée × tarif × coefficient de localisation.
@@ -468,7 +472,7 @@ def estimation(surfaces, tarif, coefficient_localisation, coeff_neutralisations,
     comp = []
     abattements = abattements or {}
     planchonnements = planchonnements or {}
-    for k, label in TAXES.items():
+    for k, label in taxes.items():
         neutral = coeff_neutralisations.get(k)
         rate = taux.get(k)
         if neutral is None or rate is None:

@@ -186,7 +186,7 @@ class _LiensArchives(HTMLParser):
                 self.ressources.append({"url": url, "format": extension, "title": titre})
 
 
-def _catalogues(annee, erreurs):
+def _catalogues(annee, erreurs, *, requete_complementaire=None):
     try:
         response = SESSION.get(PORTAIL_REI, timeout=12)
         response.raise_for_status()
@@ -198,7 +198,7 @@ def _catalogues(annee, erreurs):
 
     # Le catalogue peut regrouper les archives de plusieurs années sous un titre sans année.
     requetes = ("fichier de recensement des éléments d'imposition",
-                f"CFE base minimum {annee}")
+                requete_complementaire or f"CFE base minimum {annee}")
     for requete in requetes:
         try:
             response = SESSION.get(API, params={"q": requete, "page_size": 20}, timeout=12)

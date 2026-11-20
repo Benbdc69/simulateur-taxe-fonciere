@@ -8,14 +8,18 @@ TAUX_FRAIS = {'commune': 3, 'epci': 3, 'gemapi': 3, 'syndicat': 8, 'teom': 8}
 MOTIF_INCOMPLET = 'Le taux de frais de certaines cotisations est indéterminé.'
 
 
-def estimer_frais(montants, annee, teom_incitative_debut=False, taux_taxes_speciales=9):
+def estimer_frais(montants, annee, teom_incitative_debut=False, taux_taxes_speciales=9, *, comparaison_2017=False):
     """Applique le barème aux cotisations estimées. Arrondi indicatif au centime."""
-    if not 2023 <= int(annee) <= 2026:
+    historique = comparaison_2017 and int(annee) == 2017
+    if not historique and not 2023 <= int(annee) <= 2026:
         return None
     if taux_taxes_speciales not in (8, 9):
         raise ValueError('Taux de frais des taxes spéciales attendu : 8 ou 9 %.')
     taux = {**TAUX_FRAIS, 'teom': 3 if teom_incitative_debut else 8,
             'taxes_speciales': taux_taxes_speciales}
+    if historique:
+        # Article 1641 dans sa rédaction en vigueur en 2017, I-A et II.
+        taux['departement'] = 3
     assiettes = {cle: Decimal(str(montant)) for cle, montant in montants.items()}
     frais = {cle: (assiettes[cle] * taux[cle] / 100).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
              for cle in taux if assiettes.get(cle)}

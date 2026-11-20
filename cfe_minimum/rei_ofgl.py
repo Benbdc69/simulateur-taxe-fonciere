@@ -72,7 +72,7 @@ def lire_libelles_ofgl():
     return {code: libelle for code, libelle in libelles.items() if code not in conflits}
 
 
-def _parcourir(code, annee):
+def lire_variables(code, annee):
     meta = _requete(BASE)
     champs = {item["name"]: item.get("type") for item in meta.get("fields", []) if item.get("name")}
     champ_annee = _champ(champs, "annee", "exercice", "millesime")
@@ -101,7 +101,7 @@ def _parcourir(code, annee):
 
     variables = []
     for ligne in resultats:
-        if str(ligne.get(champ_annee)) != str(annee) or str(ligne.get(champ_insee, "")).upper() != code:
+        if str(ligne.get(champ_annee)) not in (str(annee), f"{annee}.0") or str(ligne.get(champ_insee, "")).upper() != code:
             continue
         variables.append({
             "libelle": str(ligne.get(champ_variable) or ""),
@@ -191,7 +191,7 @@ def _parser(variables, annee, code):
 def recuperer_rei_ofgl(code_insee: str, annee: int):
     """Résultat complet ou None si l'OFGL ne fournit pas ce millésime."""
     try:
-        lignes = _parcourir(code_insee, annee)
+        lignes = lire_variables(code_insee, annee)
         return _parser(lignes, annee, code_insee)
     except (requests.RequestException, ValueError, KeyError, TypeError) as exc:
         raise RuntimeError(f"Lecture OFGL indisponible : {exc}") from exc

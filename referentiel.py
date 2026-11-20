@@ -85,12 +85,11 @@ def publication_attendue(annee, inclure_historique=False):
     annee = int(annee)
     if not 2017 <= annee <= 2026:
         raise ValueError('La simulation ne modélise pas les règles 2027 et suivantes.')
-    dispo_loc = [2018, 2019, 2020, 2024, 2026]
-    loc = max((y for y in dispo_loc if y <= annee), default=None)
+    dispo_loc = [2017, 2018, 2019, 2020, 2024, 2026]
+    loc = max(y for y in dispo_loc if y <= annee)
     spec = [('tarifs', annee), ('secteurs', 2017),
             ('neutralisations', 2021 if annee >= 2021 else 2020)]
-    if loc is not None:
-        spec.insert(1, ('localisations', loc))
+    spec.insert(1, ('localisations', loc))
     if inclure_historique and annee >= 2021:
         spec.append(('neutralisations', 2020))
     return spec

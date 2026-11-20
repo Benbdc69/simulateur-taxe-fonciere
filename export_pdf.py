@@ -10,6 +10,7 @@ from reportlab.lib.units import cm
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepTogether, PageBreak
 
 from presentation_pdf import pied_rapport, synthese_pdf
+from moteur import TAXES_AVANT_2021
 
 
 # Palette éditoriale inspirée d'Axens, indépendante du thème Streamlit
@@ -33,6 +34,9 @@ def creer_pdf_estimation(dossier):
     analyse = dossier['analyse']
     result = analyse.get('result')
     frais = dossier.get('frais')
+    reforme = analyse.get('reforme_2017')
+    lissage = analyse.get('lissage')
+    planch = analyse.get('planchonnement', {})
     partial = analyse['partial']
     bien = dossier['bien']
     styles = getSampleStyleSheet()
@@ -48,6 +52,8 @@ def creer_pdf_estimation(dossier):
     lignes = [(ligne['taxe'], ligne['base_taxable'], ligne['taux_pct'], ligne['montant'])
               for ligne in (result or {}).get('lignes', ())]
     parcelle = ' '.join(str(bien.get(cle) or '') for cle in ('prefixe', 'section', 'numero')).strip()
+    reserves = [planch.get('reserve'), reforme.get('reserve_lissage') if reforme else None]
+    reserve = ' '.join(r for r in reserves if r) or 'Estimation sous réserve des paramètres cadastraux et des régimes particuliers.'
     story = synthese_pdf(
         dossier['annee'], 'Local professionnel', dossier.get('adresse'),
         f"Parcelle {parcelle} · INSEE {bien.get('code_insee', '—')}",
@@ -55,7 +61,8 @@ def creer_pdf_estimation(dossier):
         lignes, result.get('total_hors_frais') if result else None, frais,
         partial.get('valeur_locative_brute'),
         'Cotisations indisponibles : les paramètres fiscaux requis sont détaillés en annexe.'
-        if not result else 'Estimation sous réserve des paramètres cadastraux et des régimes particuliers.',
+        if not result else reserve,
+        lissage=lissage['montant'] if lissage and dossier['annee'] <= 2025 else None,
     )
     story.extend([PageBreak(), Paragraph('Annexe — détail du calcul', styles['TitreTF'])])
     exo = analyse.get('exoneration_neuf', {})
@@ -69,11 +76,42 @@ def creer_pdf_estimation(dossier):
                   Paragraph('Secteur : '+_texte(partial.get('secteur'))+' ; tarif : '+_nombre(partial.get('tarif'))+
                             ' EUR/m² ; coefficient de localisation : '+_nombre(partial.get('localisation'),4), styles['PetitTF']),
                   Paragraph('Valeur locative brute : '+_nombre(partial.get('valeur_locative_brute'))+' EUR',styles['PetitTF'])])
-    planch = analyse.get('planchonnement', {})
+    if reforme:
+        story.append(Paragraph('Réforme de 2017', styles['Heading3']))
+        story.append(Paragraph(
+            f"Base TFPB 2016 de {_nombre(reforme['base_2016'])} EUR x 1,004 = "
+            f"<b>ancienne base 2017 de {_nombre(reforme['base_ancienne_2017'])} EUR</b>.",
+            styles['PetitTF']))
+        if reforme['vl_revisee_2017'] is not None:
+            story.append(Paragraph(
+                f"Tarif 2017 de {_nombre(reforme['tarif_2017'])} EUR/m² et coefficient de localisation "
+                f"de {_nombre(reforme['localisation_2017'], 2)} appliqués à la surface pondérée, soit une "
+                f"<b>valeur locative révisée 2017 de {_nombre(reforme['vl_revisee_2017'])} EUR</b>.",
+                styles['PetitTF']))
+        if reforme['cotisations_2017']:
+            cotisations = reforme['cotisations_2017']
+            story.append(Paragraph(
+                f"Cotisations 2017, frais compris, de {_nombre(cotisations['avant'])} EUR selon "
+                f"l’ancienne base et de {_nombre(cotisations['apres'])} EUR après réforme.",
+                styles['PetitTF']))
+        for hypothese in reforme['hypotheses_lissage']:
+            story.append(Paragraph(_texte(hypothese), styles['PetitTF']))
+        if reforme['parametres_manquants']:
+            story.append(Paragraph('Données 2017 manquantes · '+_texte(', '.join(reforme['parametres_manquants'])),
+                                   styles['PetitTF']))
+        if reforme.get('reserve_lissage'):
+            story.append(Paragraph(_texte(reforme['reserve_lissage']), styles['PetitTF']))
+        story.append(Paragraph(
+            'Le calcul suppose que les surfaces et le classement saisis correspondent à 2017. '
+            '<link href="https://www.impots.gouv.fr/revision-des-valeurs-locatives">Barèmes départementaux de la DGFiP</link>.',
+            styles['PetitTF']))
+    if lissage and dossier['annee'] <= 2025:
+        story.append(Paragraph(f"Correction de lissage de <b>{_nombre(lissage['montant'])} EUR</b> "
+                               f"({_texte(lissage['mode'])}).", styles['PetitTF']))
     if planch.get('applique'):
         story.append(Paragraph('<b>Planchonnement pris en compte</b>', styles['Heading3']))
         for cle, val in planch.get('corrections', {}).items():
-            story.append(Paragraph(_texte(cle)+' : correction de base signée '+_nombre(val)+' EUR', styles['PetitTF']))
+            story.append(Paragraph(_texte(TAXES_AVANT_2021[cle])+' · correction de base '+_nombre(val)+' EUR', styles['PetitTF']))
     if planch.get('reserve'):
         story.append(Paragraph('<b>Réserve relative au planchonnement :</b> '+_texte(planch['reserve']), styles['PetitTF']))
     out_of_date=[f"{key} ({rate['annee_source']})" for key,rate in analyse.get('taux',{}).items()
@@ -150,9 +188,6 @@ def creer_pdf_estimation(dossier):
                     f"{_texte(ligne['taxe'])} : {_nombre(ligne['montant'])} EUR x {calcul['taux']} %"
                     f" = <b>{_nombre(calcul['montant'])} EUR</b>.", styles['PetitTF']))
         story.append(Paragraph('Frais calculables : '+_nombre(frais['frais'])+' EUR.', styles['CorpsTF']))
-    data_planch = analyse.get('planchonnement') or {}
-    if data_planch.get('reserve'):
-        story.append(Paragraph('<b>Planchonnement :</b> '+_texte(data_planch['reserve']),styles['PetitTF']))
     story.append(Paragraph('Ce document sert au contrôle des étapes de simulation ; il ne remplace pas l’avis fiscal, la fiche d’évaluation cadastrale ni la vérification des régimes particuliers.',styles['PetitTF']))
     pdf.build(story, onFirstPage=pied_rapport, onLaterPages=pied_rapport)
     sortie = buffer.getvalue()

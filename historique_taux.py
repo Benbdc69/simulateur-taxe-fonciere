@@ -12,8 +12,10 @@ import re
 from taux_composantes import code_commune_fiscale
 
 COMPOSANTES=('commune','syndicat','epci','taxes_speciales','gemapi','teom')
+COMPOSANTES_HISTORIQUES=(*COMPOSANTES, 'departement')
 LIBELLES={'commune':'Commune','syndicat':'Syndicat','epci':'Intercommunalité',
-          'taxes_speciales':'Taxes spéciales / TSE','gemapi':'GEMAPI','teom':'TEOM'}
+          'taxes_speciales':'Taxes spéciales / TSE','gemapi':'GEMAPI','teom':'TEOM',
+          'departement':'Département'}
 
 
 def code_reference(code_insee):
@@ -48,7 +50,7 @@ def enregistrer(ref,code_insee,annee,composante,taux,source,*,url='',
     """
     code=code_reference(code_insee)
     year=_annee(annee)
-    if composante not in COMPOSANTES:raise ValueError('Composante fiscale inconnue.')
+    if composante not in COMPOSANTES_HISTORIQUES:raise ValueError('Composante fiscale inconnue.')
     valeur=_taux(taux)
     if not str(source or '').strip():raise ValueError('Source obligatoire pour enregistrer un taux.')
     data=ref.setdefault('taux_annuels',{}).setdefault(code,{})
@@ -69,7 +71,7 @@ def enregistrer(ref,code_insee,annee,composante,taux,source,*,url='',
 
 def supprimer(ref,code_insee,annee,composante):
     code=code_reference(code_insee); year=_annee(annee)
-    if composante not in COMPOSANTES:raise ValueError('Composante fiscale inconnue.')
+    if composante not in COMPOSANTES_HISTORIQUES:raise ValueError('Composante fiscale inconnue.')
     commune=ref.get('taux_annuels',{}).get(code,{})
     obj=commune.get(str(year),{})
     if composante not in obj:return False
@@ -107,7 +109,7 @@ def resoudre(ref,code_insee,annee,composante,repli=True):
     """
     code=code_reference(code_insee)
     year=_annee(annee)
-    if composante not in COMPOSANTES:raise ValueError('Composante fiscale inconnue.')
+    if composante not in COMPOSANTES_HISTORIQUES:raise ValueError('Composante fiscale inconnue.')
     choices=[]
     for key in _cles_stockage_compatibles(ref,code):
         annees=ref.get('taux_annuels',{}).get(key,{})
@@ -162,7 +164,7 @@ def integrer_publication(ref,pub,remplacer=False):
     y=_annee(pub['annee']); code=code_reference(pub['code_insee'])
     log=[]; incidents=[]
     for key,val in pub.get('taux',{}).items():
-        if key not in COMPOSANTES:continue
+        if key not in COMPOSANTES_HISTORIQUES:continue
         preuve=pub.get('preuves',{}).get(key,{})
         provenance=preuve.get('source') or pub.get('source') or ''
         if not provenance:

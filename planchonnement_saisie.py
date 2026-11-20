@@ -6,39 +6,39 @@ seuls fichiers de tarifs DGFiP. La règle 2027+ est juridiquement distincte.
 """
 from __future__ import annotations
 import math
-from moteur import TAXES
+from moteur import TAXES, TAXES_AVANT_2021
 
 
-def _number(value):
+def montant_facultatif(value, libelle='Correction de planchonnement'):
     if value is None:
         return None
     if isinstance(value, str):
-        value=value.replace('\u00a0','').replace(' ','').replace(',', '.').strip()
+        value=value.replace('\u202f','').replace('\u00a0','').replace(' ','').replace(',', '.').strip()
         if not value:
             return None
     try:
         f=float(value)
     except (TypeError,ValueError) as exc:
-        raise ValueError('Correction de planchonnement invalide : renseigner un montant en euros (ex. -125,50).') from exc
+        raise ValueError(f'{libelle} invalide. Renseignez une valeur numérique.') from exc
     if not math.isfinite(f):
-        raise ValueError('Correction de planchonnement invalide : valeur non finie.')
+        raise ValueError(f'{libelle} invalide. Renseignez une valeur finie.')
     return f
 
 
 def valider_corrections(values):
     if not isinstance(values,dict):
         raise ValueError('Format des corrections non reconnu.')
-    if set(values)-set(TAXES):
+    if set(values)-set(TAXES_AVANT_2021):
         raise ValueError('Composante fiscale inconnue dans le planchonnement.')
     parsed={}
     for key,value in values.items():
-        number=_number(value)
+        number=montant_facultatif(value)
         if number is not None:
             parsed[key]=number
     return parsed
 
 
-def preparer_planchonnement(annee, historique='inconnu', corrections=None):
+def preparer_planchonnement(annee, historique='inconnu', corrections=None, *, taxes=TAXES):
     annee=int(annee)
     if historique not in ('ancien','recent','inconnu'):
         raise ValueError('Historique du local non reconnu.')
@@ -61,6 +61,6 @@ def preparer_planchonnement(annee, historique='inconnu', corrections=None):
     if not corr:
         return {'corrections':{},'applique':False,'complet':False,
                 'reserve':'Local ancien : aucune correction historique fournie. Estimation HORS planchonnement. Les montants 2017–2026 peuvent en être significativement affectés.'}
-    absent=set(TAXES)-set(corr)
+    absent=set(taxes)-set(corr)
     warning='Les corrections sont renseignées pour certaines taxes seulement : estimation partiellement corrigée, non définitive.' if absent else None
     return {'corrections':corr,'applique':True,'complet':not bool(absent), 'reserve':warning}

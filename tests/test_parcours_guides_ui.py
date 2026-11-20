@@ -31,8 +31,14 @@ class ParcoursGuidesUI(unittest.TestCase):
         self.assertTrue(any('catégorie fiscale' in e.value for e in at.error))
         champ(at.checkbox, 'Construction nouvelle, reconstruction ou addition de construction (hors habitation)').check().run()
         self.assertIn('Année d’achèvement des travaux', [x.label for x in at.number_input])
-        champ(at.selectbox, 'Le local existait-il comme local professionnel au 1er janvier 2017 ?').select('ancien').run()
+        label = 'Base TFPB du local figurant sur l’avis 2016 (€)'
+        self.assertNotIn(label, [x.label for x in at.text_input])
+        historique = 'Le local existait-il comme local professionnel au 1er janvier 2017 ?'
+        champ(at.selectbox, historique).select('ancien').run()
+        self.assertIn(label, [x.label for x in at.text_input])
         self.assertEqual(len([x for x in at.text_input if 'correction de base' in x.label]), 6)
+        champ(at.selectbox, historique).select('recent').run()
+        self.assertNotIn(label, [x.label for x in at.text_input])
         self.assertFalse(at.exception)
 
     def test_habitation_confirmation_navigation_calcul_et_modification(self):

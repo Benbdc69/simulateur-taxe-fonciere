@@ -1,9 +1,11 @@
 import pathlib
 import sys
 import unittest
+from io import StringIO
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 from moteur import regime_reforme, planchonnement_2017, lissage_2017_2025, estimation
+from taux_historiques_tf import _lire_csv
 
 
 class ReformesTests(unittest.TestCase):
@@ -70,5 +72,15 @@ class ReformesTests(unittest.TestCase):
         self.assertEqual(r['lignes'][0]['base_taxable'],4750)
         self.assertEqual(r['total_avant_lissage'],950)
         self.assertEqual(r['total_estime'],850)
+
+    def test_archive_rei_respecte_commune_millesime_et_taux_nuls(self):
+        archive = StringIO(
+            'DEP;COM;ANNEE;E12;E22;E32;E42;E52;E52A;E52TASA;E52gGEMAPI;Taux_Plein_TEOM\n'
+            '69;029;2017;20;0;0;10;1,2;0,3;0;0;0\n'
+            '69;029;2018;21;0;0;11;0;0;0;0;0\n'
+            '69;030;2017;22;0;0;12;0;0;0;0;0\n')
+        taux = _lire_csv(archive, '69029', 2017)
+        self.assertEqual(taux, {'commune': 20, 'departement': 10, 'syndicat': 0, 'epci': 0,
+                                'taxes_speciales': 1.5, 'gemapi': 0, 'teom': 0})
 
 if __name__=='__main__':unittest.main()
