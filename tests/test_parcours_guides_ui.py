@@ -54,8 +54,10 @@ class ParcoursGuidesUI(unittest.TestCase):
         lignes = [element.value for element in at.markdown]
         self.assertTrue(any(ligne.startswith('**MAG4') and '400 à moins de 2 500 m²' in ligne for ligne in lignes))
         self.assertTrue(any(ligne.startswith('**MAG5') and 'à partir de 2 500 m²' in ligne for ligne in lignes))
-        self.assertTrue(any('Le parking annexe d’un commerce se renseigne au cadre 4, en PK2' in ligne
-                            for ligne in lignes))
+        for extrait in ('celle qui occupe la plus grande surface', 'cloisons mobiles', 'centres de radiologie',
+                        'rattachées au local se renseignent aussi en PK2', 'l’arrêté du 23 décembre 2009'):
+            self.assertTrue(any(extrait in ligne for ligne in lignes), extrait)
+        self.assertTrue(any('6660-NOT' in element.value for element in at.caption))
 
     def test_habitation_confirmation_navigation_calcul_et_modification(self):
         adr = {'libelle': '18 cours Gambetta, 69007 Lyon', 'commune': 'Lyon', 'insee': '69387', 'code_postal': '69007'}
