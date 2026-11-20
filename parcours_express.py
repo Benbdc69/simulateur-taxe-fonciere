@@ -27,6 +27,7 @@ from mesure_cadastrale import afficher_mesures
 from exoneration_neuf import exon_neuf_non_habitation
 from planchonnement_saisie import montant_facultatif, preparer_planchonnement, valider_corrections
 from reforme_2017 import reconstituer_reforme
+from guide_categories import afficher_guide_categories, libelle_categorie
 
 def euro(val):
     return f'{float(val):,.2f}'.replace(',', ' ').replace('.', ',') + ' €'
@@ -211,9 +212,10 @@ def afficher_saisie():
             reference = saisir_reference(cle_calcul('express_ref'), automatique=automatique, selection=selection_commune)
         categorie=st.selectbox('Catégorie du local', cat_codes,key=cle_calcul('express_categorie'),
             index=None, placeholder='Sélectionnez la catégorie figurant sur votre document',
-            format_func=lambda code:f"{code} — {cat_map[code]['description']}",
-            help='Reprenez le code fiscal de la déclaration 6660-REV ou de la fiche cadastrale (ex. BUR2). Il décrit la nature et l’utilisation du local ; ce n’est pas un code d’activité NAF.')
-        st.caption('Catégorie inconnue ? Demandez la fiche d’évaluation au service des impôts fonciers. Choisir une catégorie au hasard peut modifier fortement le tarif.')
+            format_func=lambda code: f'{code} — {libelle_categorie(code, cat_map)}',
+            help='Reprenez le code fiscal de la déclaration 6660-REV ou de la fiche cadastrale (ex. BUR2).')
+        if st.button('Consulter le guide des catégories', type='tertiary', key=cle_calcul('express_ouvrir_guide')):
+            afficher_guide_categories(cat_map, categorie)
         st.markdown('#### 2 · Répartir les surfaces')
         afficher_mesures(mode_recherche, reference, adresse, adresse_selectionnee)
         st.caption('Chaque surface doit apparaître une seule fois. Ne saisissez pas une surface déjà pondérée. Laissez 0 pour les rubriques qui ne concernent pas votre bien.')

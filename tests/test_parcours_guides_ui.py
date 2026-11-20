@@ -43,6 +43,20 @@ class ParcoursGuidesUI(unittest.TestCase):
         self.assertNotIn(label, [x.label for x in at.text_input])
         self.assertFalse(at.exception)
 
+    def test_professionnel_guide_categories_dans_une_fenetre(self):
+        at = AppTest.from_file(str(ROOT / 'parcours_express.py')).run()
+        champ(at.selectbox, 'Catégorie du local').select('MAG3').run()
+        champ(at.button, 'Consulter le guide des catégories').click().run()
+        self.assertFalse(at.exception)
+        self.assertEqual(len(at.get('dialog')), 1)
+        self.assertEqual(champ(at.selectbox, 'Catégorie du local').value, 'MAG3')
+        self.assertIn('Dépôts, stockage et parcs de stationnement', [bloc.label for bloc in at.expander])
+        lignes = [element.value for element in at.markdown]
+        self.assertTrue(any(ligne.startswith('**MAG4') and '400 à moins de 2 500 m²' in ligne for ligne in lignes))
+        self.assertTrue(any(ligne.startswith('**MAG5') and 'à partir de 2 500 m²' in ligne for ligne in lignes))
+        self.assertTrue(any('Le parking annexe d’un commerce se renseigne au cadre 4, en PK2' in ligne
+                            for ligne in lignes))
+
     def test_habitation_confirmation_navigation_calcul_et_modification(self):
         adr = {'libelle': '18 cours Gambetta, 69007 Lyon', 'commune': 'Lyon', 'insee': '69387', 'code_postal': '69007'}
         rates = {k: {'taux': 30 if k == 'commune' else 0, 'annee_source': 2026,
