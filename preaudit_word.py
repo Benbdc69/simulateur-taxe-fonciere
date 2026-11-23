@@ -33,26 +33,90 @@ def bilan_preaudit(evaluation, audit):
     ventilation = audit.get('ventilation', 'inconnue')
     total = (evaluation.get('frais') or {}).get('total')
     montant = total if total is not None else resultat.get('total_hors_frais')
-    if ventilation == 'inconnue':
+    if ventilation == 'inconnue' or evaluation['categorie'] == 'EXC1':
         montant = None
-        suite = 'Confirmer la ventilation P1/P2 avec la 6660-REV, la fiche cadastrale ou un plan coté.'
-    elif montant is None:
-        suite = 'Vérifier les paramètres fiscaux manquants indiqués en annexe.'
-    elif montant_avis is None:
-        suite = 'Isoler le montant de l’avis pour ce local et ce millésime.'
-    elif total is None:
-        suite = 'Vérifier les frais pour rapprocher le montant estimé du total de l’avis.'
-    else:
-        suite = 'Vérifier les bases et le classement retenus sur la fiche d’évaluation cadastrale.'
     ecart = None
     if montant_avis is not None and montant is not None and total is not None:
         avis_arrondi = Decimal(str(montant_avis)).quantize(Decimal(1), rounding=ROUND_HALF_UP)
         estimation_arrondie = Decimal(str(montant)).quantize(Decimal(1), rounding=ROUND_HALF_UP)
         ecart = avis_arrondi - estimation_arrondie
+    constat, suite = _conclusion_preaudit(evaluation, ventilation, montant_avis, montant, ecart)
     return {
         'avis': montant_avis, 'estimation': montant, 'ecart': ecart,
-        'frais_inclus': total is not None, 'suite': suite,
+        'frais_inclus': total is not None, 'constat': constat, 'suite': suite,
     }
+
+
+def _conclusion_preaudit(evaluation, ventilation, montant_avis, estimation, ecart):
+    if evaluation['categorie'] == 'EXC1':
+        return (
+            'Ce local relève d’une méthode d’évaluation particulière.',
+            'Vérifiez la valeur vénale retenue dans la fiche d’évaluation cadastrale pour établir une estimation '
+            'comparable et apprécier l’intérêt d’une démarche.',
+        )
+    if ventilation == 'inconnue':
+        return (
+            'La ventilation des surfaces est nécessaire pour chiffrer l’écart.',
+            'Demandez la fiche d’évaluation cadastrale ou la déclaration 6660-REV pour distinguer les surfaces '
+            'principales et secondaires. La mesure de l’emprise donne un repère pour la surface au sol. '
+            'Une fois la répartition vérifiée, nous pourrons reprendre la comparaison.',
+        )
+    if estimation is None:
+        return (
+            'L’estimation reste à compléter.',
+            'Vérifiez les données fiscales signalées en annexe pour reconstituer la cotisation et apprécier l’écart.',
+        )
+    if montant_avis is None:
+        return (
+            'Le montant de l’avis pour ce local reste à isoler.',
+            'Identifiez la cotisation propre au local et à l’année étudiés, avec les mêmes taxes annexes et frais '
+            'que l’estimation, avant de décider d’une suite.',
+        )
+    if ecart is None:
+        return (
+            'L’estimation est disponible hors frais de gestion.',
+            'Vérifiez les frais et les taxes annexes figurant sur l’avis pour comparer des montants à périmètre identique.',
+        )
+
+    if ecart > 0:
+        constat = f'Le montant de votre avis dépasse notre estimation de {euro_arrondi(ecart)}.'
+    elif ecart < 0:
+        constat = f'Votre avis est inférieur de {euro_arrondi(-ecart)} à notre estimation.'
+    else:
+        constat = 'Votre avis et notre estimation concordent à l’euro près.'
+
+    analyse = evaluation['analyse']
+    taux = analyse.get('taux') or {}
+    taux_anterieurs = any(part and part.get('decalage', 0) > 0 for part in taux.values())
+    teom = taux.get('teom') or {}
+    zonage_a_verifier = teom.get('zonage_confirme') is False and teom.get('taux', 0) > 0
+    reserves = [libelle for a_verifier, libelle in (
+        (ventilation == 'estimee', 'la répartition des surfaces'),
+        (taux_anterieurs, 'les taux de l’année étudiée'),
+        (zonage_a_verifier, 'le zonage de la taxe d’enlèvement des ordures ménagères'),
+        (analyse.get('neutral_warnings'), 'les coefficients de neutralisation'),
+        ((analyse.get('planchonnement') or {}).get('reserve'), 'le planchonnement'),
+        ((analyse.get('exoneration_neuf') or {}).get('a_verifier'), 'l’exonération de construction nouvelle'),
+    ) if a_verifier]
+    if reserves:
+        suite = (
+            f'Le rapprochement reste provisoire. Vérifiez {", ".join(reserves)}, puis recalculez la cotisation '
+            'avant de vous prononcer sur l’intérêt d’une réclamation.'
+        )
+    elif ecart > 0:
+        suite = (
+            'Rapprochez la fiche d’évaluation cadastrale de la déclaration 6660-REV et de la situation du local '
+            'au 1er janvier de l’année d’imposition (CGI, art. 1415). Vérifiez en priorité le classement, '
+            'les surfaces et leur répartition. Envisagez une réclamation si ce contrôle documente une erreur '
+            'qui majore la cotisation et si le gain attendu justifie le coût de la démarche.'
+        )
+    else:
+        suite = (
+            'Une demande de réduction paraît peu opportune au vu des montants comparés. Si vous avez relevé '
+            'une erreur précise dans la description ou le classement du local, un contrôle ciblé de la fiche '
+            'd’évaluation reste utile.'
+        )
+    return constat, suite
 
 
 def _nb(valeur, decimales=2):
@@ -150,7 +214,9 @@ def creer_word_preaudit(evaluation, audit):
     doc.add_paragraph(f"Catégorie {evaluation['categorie']} · Parcelle {bien.get('section', '')} {bien.get('numero', '')} · INSEE {bien.get('code_insee', '')}")
 
     doc.add_heading('Montants comparés', level=1)
-    libelle_estimation = 'Estimation frais inclus' if bilan['frais_inclus'] else 'Estimation hors frais'
+    libelle_estimation = 'Notre estimation'
+    if bilan['estimation'] is not None:
+        libelle_estimation += ' (frais inclus)' if bilan['frais_inclus'] else ' (hors frais)'
     lignes = [
         ('Montant de l’avis', bilan['avis']),
         (libelle_estimation, bilan['estimation']),
@@ -159,21 +225,30 @@ def creer_word_preaudit(evaluation, audit):
     _table(doc, ('Montant', 'Valeur'),
            [(nom, euro_arrondi(val) if val is not None else '—') for nom, val in lignes],
            (12, 5), (1,))
+    constat = doc.add_paragraph()
+    constat.paragraph_format.space_before = Pt(7)
+    constat.add_run(bilan['constat']).bold = True
 
-    doc.add_heading('Constats', level=1)
+    doc.add_heading('Suite proposée', level=1)
+    doc.add_paragraph(bilan['suite'])
+    if bilan['ecart'] is not None and bilan['ecart'] > 0:
+        doc.add_paragraph(
+            'Le délai de réclamation court, en règle générale, jusqu’au 31 décembre de l’année suivant celle de '
+            'la mise en recouvrement de l’impôt (CGI, art. 1507 et LPF, art. R*196-2).'
+        )
+
+    doc.add_heading('Éléments examinés', level=1)
     surface_batie = audit.get('surface_batie')
     total_saisi = surfaces.get('P1', 0) + surfaces.get('P2', 0)
     if surface_batie is not None:
         doc.add_paragraph(f"Surface bâtie mesurée · {_nb(surface_batie)} m².")
     if total_saisi and (surface_batie is None or ventilation == 'documentee'):
         doc.add_paragraph(f"Surface bâtie saisie (P1 + P2) · {_nb(total_saisi)} m².")
-    doc.add_paragraph(VENTILATIONS[ventilation] + '.')
+    doc.add_paragraph('Source de la ventilation P1/P2 · ' + VENTILATIONS[ventilation] + '.')
     if analyse.get('missing') or analyse.get('neutral_warnings') or (analyse.get('planchonnement') or {}).get('reserve'):
         doc.add_paragraph('Les paramètres à confirmer figurent en annexe.')
     if audit.get('observation'):
         doc.add_paragraph(' '.join(audit['observation'].split()))
-    doc.add_heading('Vérification prioritaire', level=1)
-    doc.add_paragraph(bilan['suite'])
     doc.add_heading('Cadre fiscal', level=1)
     if evaluation['categorie'] == 'EXC1':
         doc.add_paragraph(
@@ -182,16 +257,14 @@ def creer_word_preaudit(evaluation, audit):
         )
     else:
         doc.add_paragraph(
-            'La valeur locative cadastrale du local est obtenue en multipliant sa surface pondérée par le '
-            'tarif de sa catégorie dans le secteur d’évaluation. Un coefficient de localisation peut '
-            'ajuster ce tarif en fonction de la situation de la parcelle (CGI, art. 1498, II). '
-            'La pondération tient compte de l’usage et des caractéristiques des différentes surfaces '
-            '(CGI, annexe III, art. 324 Z).'
+            'La valeur locative résulte de la surface pondérée et du tarif applicable à la catégorie du local '
+            'dans son secteur d’évaluation, ajusté le cas échéant par un coefficient de localisation '
+            '(CGI, art. 1498, II). La pondération tient compte de l’usage des surfaces, notamment des réserves '
+            'et des stationnements (CGI, annexe III, art. 324 Z).'
         )
     doc.add_paragraph(
-        'La taxe foncière sur les propriétés bâties est assise sur la valeur locative cadastrale, '
-        'sous déduction forfaitaire de 50 % (CGI, art. 1388). Les taux s’appliquent aux bases '
-        'de chaque part après les correctifs applicables.'
+        'La taxe foncière repose sur la valeur locative cadastrale après déduction forfaitaire de 50 % '
+        '(CGI, art. 1388). Les taux s’appliquent après les correctifs et exonérations propres à chaque part.'
     )
     planchonnement = analyse.get('planchonnement') or {}
     if evaluation.get('historique') == 'ancien' or planchonnement.get('applique'):
@@ -201,8 +274,7 @@ def creer_word_preaudit(evaluation, audit):
         )
     doc.add_paragraph('Montants indicatifs arrondis à l’euro et soumis à confirmation des données cadastrales.', style='Caption')
 
-    doc.add_page_break()
-    doc.add_heading('Annexe · Données de la simulation', level=0)
+    doc.add_heading('Annexe · Données de la simulation', level=0).paragraph_format.page_break_before = True
     doc.add_paragraph(
         f"Secteur {partial.get('secteur') or '—'} · Tarif {_nb(partial.get('tarif'))} €/m² "
         f"· Localisation {_nb(partial.get('localisation'), 4)}"

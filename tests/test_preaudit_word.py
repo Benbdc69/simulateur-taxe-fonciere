@@ -47,6 +47,31 @@ class PreauditWordTests(unittest.TestCase):
         exceptionnel = contenu({**EVALUATION, 'categorie': 'EXC1'})
         self.assertIn('article 1498, III', exceptionnel)
         self.assertNotIn('art. 1498, II)', exceptionnel)
+        self.assertIsNone(bilan_preaudit({**EVALUATION, 'categorie': 'EXC1'}, AUDIT)['ecart'])
+
+    def test_rapport_adapte_la_suite_au_sens_de_l_ecart(self):
+        favorable = Document(BytesIO(creer_word_preaudit(EVALUATION, AUDIT)))
+        conclusion = next(p for p in favorable.paragraphs if 'dépasse notre estimation' in p.text)
+        self.assertIn('150 €', conclusion.text)
+        self.assertTrue(conclusion.runs[0].bold)
+        texte = '\n'.join(p.text for p in favorable.paragraphs)
+        self.assertIn('art. 1415', texte)
+        self.assertIn('art. R*196-2', texte)
+        self.assertIn('si le gain attendu justifie le coût de la démarche', texte)
+        for montant, attendu in ((1850, 'concordent à l’euro près'), (1800, 'inférieur de 50 €')):
+            with self.subTest(avis=montant):
+                bilan = bilan_preaudit(EVALUATION, {**AUDIT, 'montant_avis': montant})
+                self.assertIn(attendu, bilan['constat'])
+                self.assertIn('réduction paraît peu opportune', bilan['suite'])
+
+    def test_ecart_provisoire_demande_un_controle_avant_de_conseiller(self):
+        analyse = {**EVALUATION['analyse'], 'planchonnement': {'reserve': 'À vérifier.'},
+                   'taux': {'commune': {'decalage': 1}, 'teom': {'taux': 6, 'zonage_confirme': False}}}
+        bilan = bilan_preaudit({**EVALUATION, 'analyse': analyse}, {**AUDIT, 'ventilation': 'estimee'})
+        self.assertEqual(bilan['ecart'], Decimal('150'))
+        for libelle in ('reste provisoire', 'répartition des surfaces', 'taux de l’année', 'zonage', 'planchonnement'):
+            self.assertIn(libelle, bilan['suite'])
+        self.assertNotIn('Envisagez une réclamation', bilan['suite'])
 
     def test_telechargement_word_depuis_la_fenetre(self):
         at = AppTest.from_string(
