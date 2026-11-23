@@ -29,6 +29,7 @@ from planchonnement_saisie import montant_facultatif, preparer_planchonnement, v
 from reforme_2017 import reconstituer_reforme
 from guide_categories import afficher_guide_categories, libelle_categorie
 from vue_rue import afficher_lien_street_view, afficher_street_view_adresse, url_street_view
+from saisie_preaudit import actions_preaudit
 
 def euro(val):
     return f'{float(val):,.2f}'.replace(',', ' ').replace('.', ',') + ' €'
@@ -52,7 +53,7 @@ def normaliser_identite(parcelle, adresse, ref):
 
 def calculer_dossier(ref, ref_initial, bien, categorie, surfaces, annee, construction_nouvelle=False,
                     annee_achevement=None, historique="inconnu", corrections_planchonnement=None,
-                    *, base_2016=None, localisation_2017=None, avec_replis=True):
+                    *, base_2016=None, localisation_2017=None, avec_replis=True, total_sans_ventilation=False):
     """Calcule l’estimation et le planchonnement à partir de la base 2016."""
     exo = exon_neuf_non_habitation(annee, annee_achevement, construction_nouvelle)
     reconstitution = historique == 'ancien' and base_2016 is not None and 2017 <= annee <= 2026
@@ -105,7 +106,11 @@ def calculer_dossier(ref, ref_initial, bien, categorie, surfaces, annee, constru
     if loc is None: missing.append('coefficient de localisation')
     partial = {'surface_ponderee': weighted, 'secteur': sect, 'tarif': tarif, 'localisation': loc,
                'valeur_locative_brute': weighted * tarif * loc if tarif is not None and loc is not None else None}
-    if weighted <= 0: missing.append('surface du local')
+    if total_sans_ventilation:
+        partial['valeur_locative_brute'] = None
+        missing.append('ventilation des surfaces bâties en P1/P2')
+    elif weighted <= 0:
+        missing.append('surface du local')
     if not missing:
         result = estimation(surfaces, tarif, loc, coeffs, taux, abattements=exo['taux'],
                             planchonnements=planch['corrections'], taxes=taxes)
@@ -147,17 +152,19 @@ def actualiser_si_necessaire(annee, bien, *, valeurs=True, taux=True, taux_histo
 
 def finaliser(candidat, categorie, surfaces, annee, construction_nouvelle=False, annee_achevement=None,
               historique="inconnu", corrections_planchonnement=None, *, base_2016=None,
-              localisation_2017=None):
+              localisation_2017=None, mesures=None):
     adresse_result, parcelle = candidat
     ref = lire_ref()
     bien = normaliser_identite(parcelle, adresse_result, ref)
     initial = json.loads(BASE.read_text(encoding='utf-8'))
+    total_sans_ventilation = bool((mesures or {}).get('surface_batie')) and not (surfaces.get('P1') or surfaces.get('P2'))
     with st.spinner('Calcul à partir des barèmes et taux disponibles…'):
         def calculer(ref_actif, *, avec_replis=False):
             return calculer_dossier(ref_actif, initial, bien, categorie, surfaces, annee,
                                    construction_nouvelle, annee_achevement, historique,
                                    corrections_planchonnement, base_2016=base_2016,
-                                   localisation_2017=localisation_2017, avec_replis=avec_replis)
+                                   localisation_2017=localisation_2017, avec_replis=avec_replis,
+                                   total_sans_ventilation=total_sans_ventilation)
 
         res = calculer(ref)
         issues, actualise = [], False
@@ -176,7 +183,8 @@ def finaliser(candidat, categorie, surfaces, annee, construction_nouvelle=False,
         'street_view': url_street_view(adresse_result, parcelle),
         'categorie':categorie,'annee':annee, 'construction_nouvelle':construction_nouvelle, 'annee_achevement':annee_achevement,
         'historique':historique,
-        'surfaces':surfaces,'analyse':res,'sync_incidents':issues}
+        'surfaces':surfaces,'mesures':mesures or {},'analyse':res,'sync_incidents':issues}
+    st.session_state.pop('_brouillon_preaudit', None)
     st.session_state.pop('_parcelles_attente',None)
 
 
@@ -220,7 +228,7 @@ def afficher_saisie():
         if st.button('Consulter le guide des catégories', type='tertiary', key=cle_calcul('express_ouvrir_guide')):
             afficher_guide_categories(cat_map, categorie)
         st.markdown('#### 2 · Répartir les surfaces')
-        afficher_mesures(mode_recherche, reference, adresse, adresse_selectionnee)
+        mesures = afficher_mesures(mode_recherche, reference, adresse, adresse_selectionnee) or {}
         st.caption('Chaque surface doit apparaître une seule fois. Ne saisissez pas une surface déjà pondérée. Laissez 0 pour les rubriques qui ne concernent pas votre bien.')
         aides_surfaces={
             'P1':'Surface des parties principales utilisées pour l’activité. Reprenez la rubrique P1 de la déclaration, sans y ajouter les surfaces P2, P3 ou les parkings.',
@@ -282,7 +290,7 @@ def afficher_saisie():
                 for i,(cle,libelle) in enumerate(plan_taxes.items()):
                     with cols_plan[i % 2]:
                         corrections_brutes[cle] = st.text_input(libelle+' · correction de base (€)', value='', key=cle_calcul(f'plan_{cle}_{annee}'), placeholder='ex. -125,50', help='Montant signé de correction de base imposable pour cette taxe et cette année, justifié par votre fiche fiscale. Vide = inconnu ; 0 = correction nulle confirmée. Ce champ ne reçoit ni le montant de taxe payé ni un taux.')
-        signature=json.dumps([mode_recherche,reference,adresse,adresse_selectionnee,categorie,surfaces,annee,construction_nouvelle,annee_achevement,historique,corrections_brutes,base_brute,localisation_brute],sort_keys=True)
+        signature=json.dumps([mode_recherche,reference,adresse,adresse_selectionnee,categorie,surfaces,mesures,annee,construction_nouvelle,annee_achevement,historique,corrections_brutes,base_brute,localisation_brute],sort_keys=True)
         if st.session_state.get('_express_saisie') != signature:
             st.session_state.pop('_calcul_express',None)
             st.session_state.pop('_parcelles_attente',None)
@@ -297,7 +305,7 @@ def afficher_saisie():
             st.error('Indiquez une adresse complète pour localiser le bien.')
         elif categorie is None:
             st.error('Sélectionnez la catégorie fiscale figurant sur votre déclaration 6660-REV ou votre fiche cadastrale.')
-        elif not any(surfaces.values()):
+        elif not any(surfaces.values()) and not mesures.get('surface_batie'):
             st.error('Renseignez au moins une surface.')
         else:
             try:
@@ -326,7 +334,7 @@ def afficher_saisie():
                                 'categorie':categorie,'surfaces':surfaces,'annee':annee,
                                 'construction_nouvelle':construction_nouvelle,'annee_achevement':annee_achevement,
                                 'historique':historique,'corrections_planchonnement':corrections_validees,
-                                'donnees_historiques':donnees_historiques}
+                                'donnees_historiques':donnees_historiques, 'mesures':mesures}
                     else:
                         options=[adresse_selectionnee] if adresse_selectionnee is not None else adresses(adresse)
                         if not options:
@@ -345,12 +353,13 @@ def afficher_saisie():
                                 st.error('Aucune parcelle identifiable à cette adresse. Essayez une adresse plus précise.')
                             elif len(cand)==1 and cand[0][1].get('recherche')=='Point dans la parcelle':
                                 finaliser(cand[0], categorie, surfaces, annee, construction_nouvelle,
-                                          annee_achevement, historique, corrections_validees, **donnees_historiques)
+                                          annee_achevement, historique, corrections_validees,
+                                          mesures=mesures, **donnees_historiques)
                                 st.rerun()
                             else:
                                 st.session_state['_parcelles_attente']={
                                     'candidats':cand,'categorie':categorie,'surfaces':surfaces,'annee':annee,'construction_nouvelle':construction_nouvelle,'annee_achevement':annee_achevement,'historique':historique,'corrections_planchonnement':corrections_validees,
-                                    'donnees_historiques':donnees_historiques}
+                                    'donnees_historiques':donnees_historiques, 'mesures':mesures}
                 except Exception as exc:
                     st.error('Recherche cadastrale momentanément indisponible : '+str(exc))
 
@@ -374,7 +383,8 @@ def afficher_saisie():
                 try:
                     finaliser(candidats[selection],pending['categorie'],pending['surfaces'],pending['annee'],pending.get('construction_nouvelle',False),pending.get('annee_achevement'),pending.get('historique','inconnu'),pending.get('corrections_planchonnement',{}),
                               base_2016=pending.get('donnees_historiques', {}).get('base_2016'),
-                              localisation_2017=pending.get('donnees_historiques', {}).get('localisation_2017'))
+                              localisation_2017=pending.get('donnees_historiques', {}).get('localisation_2017'),
+                              mesures=pending.get('mesures'))
                     st.rerun()
                 except Exception as exc:
                     st.error('Le calcul n’a pas pu être finalisé : '+str(exc))
@@ -421,6 +431,7 @@ else:
             st.caption('Planchonnement intégré à l’estimation.')
         if planch.get('reserve'):
             st.warning(planch['reserve'])
+    actions_preaudit({**calcule, 'frais': frais})
     rapport.download_button(
         'Télécharger mon estimation en PDF',
         data=creer_pdf_estimation({**calcule, 'frais': frais}),

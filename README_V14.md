@@ -16,6 +16,38 @@ Dans votre dépôt GitHub existant, chargez les nouveaux fichiers à la racine (
 
 Ne déposez jamais `data/referentiel_local.json`, les dossiers `data/historique`, `data/en_attente`, les données de clients ou les fichiers `.streamlit/secrets.toml` sur GitHub. Le `.gitignore` est livré mais les fichiers déposés via l'interface web doivent toujours être vérifiés.
 
+### Pré-audit Word et dossiers clients
+
+Le parcours professionnel permet de préparer le pré-audit Word depuis le résultat.
+Pour activer l’enregistrement et la consultation des dossiers en ligne, ajoutez
+la connexion à une base PostgreSQL persistante et les comptes de l’équipe dans
+les Secrets de Streamlit. La connexion peut également être fournie par la variable
+d’environnement `TF_DOSSIERS_DATABASE_URL`.
+
+```toml
+TF_DOSSIERS_DATABASE_URL = "postgresql://utilisateur:mot_de_passe@serveur/base?sslmode=require"
+
+[dossiers_utilisateurs.camille]
+mot_de_passe_hash = "scrypt$..."
+role = "edition"
+
+[dossiers_utilisateurs.alex]
+mot_de_passe_hash = "scrypt$..."
+role = "lecture"
+```
+
+Produisez chaque empreinte avec `python creer_mot_de_passe.py` et copiez la valeur
+entre guillemets dans `mot_de_passe_hash`. L’accès aux dossiers utilise ces comptes
+après l’accès habituel au portail. Le rôle `edition` peut enregistrer des versions
+et mettre à jour le lien documentaire. Le rôle `lecture` peut consulter et
+télécharger. Les deux rôles travaillent dans le même espace d’équipe.
+
+Les tables `tf_societes` et `tf_evaluations` sont créées lors du premier accès aux
+dossiers. Activez les sauvegardes auprès de l’hébergeur PostgreSQL. Le lien
+documentaire facultatif pointe vers votre espace de pièces existant. En mode local,
+`TF_DOSSIERS_SQLITE_PATH` permet un essai avec un fichier SQLite sauvegardé sur
+votre poste et les mêmes comptes dans `.streamlit/secrets.toml`.
+
 ## Limites fiscales importantes
 
 - L'adresse et la déclaration 6660-REV **ne contiennent pas** les anciennes valeurs locatives nécessaires au planchonnement des locaux existant avant 2017, ni toutes les exonérations. Le résultat visible est une **estimation de base** sans correctifs historiques, exonérations particulières et sans frais de gestion. Il ne remplace pas un avis fiscal.

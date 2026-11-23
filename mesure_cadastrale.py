@@ -135,3 +135,9 @@ def afficher_mesures(mode, reference, adresse, selection):
                 if pk2 <= 1_000_000:
                     st.button('Reporter dans PK2', key=cle_carte + '_report_pk2',
                               on_click=reporter_surfaces, args=({'PK2': pk2},))
+        mesures = {}
+        if 0 < total <= 1_000_000:
+            mesures.update(surface_batie=total, emprise=float(emprise), niveaux=int(niveaux))
+        if 0 < pk2 <= 1_000_000:
+            mesures['pk2'] = float(pk2)
+        return mesures
