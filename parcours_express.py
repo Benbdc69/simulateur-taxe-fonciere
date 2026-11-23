@@ -28,6 +28,7 @@ from exoneration_neuf import exon_neuf_non_habitation
 from planchonnement_saisie import montant_facultatif, preparer_planchonnement, valider_corrections
 from reforme_2017 import reconstituer_reforme
 from guide_categories import afficher_guide_categories, libelle_categorie
+from vue_rue import afficher_lien_street_view, afficher_street_view_adresse, url_street_view
 
 def euro(val):
     return f'{float(val):,.2f}'.replace(',', ' ').replace('.', ',') + ' €'
@@ -172,6 +173,7 @@ def finaliser(candidat, categorie, surfaces, annee, construction_nouvelle=False,
             res = calculer(ref, avec_replis=True)
     st.session_state['_calcul_express']={
         'bien':bien,'adresse':adresse_result['libelle'], 'adresse_declaree':adresse_result,
+        'street_view': url_street_view(adresse_result, parcelle),
         'categorie':categorie,'annee':annee, 'construction_nouvelle':construction_nouvelle, 'annee_achevement':annee_achevement,
         'historique':historique,
         'surfaces':surfaces,'analyse':res,'sync_incidents':issues}
@@ -207,6 +209,7 @@ def afficher_saisie():
         adresse_selectionnee = None
         if mode_recherche == 'Adresse':
             adresse, adresse_selectionnee = saisir_adresse('Adresse complète du bien', cle_calcul('express_adresse'))
+            afficher_street_view_adresse(adresse, adresse_selectionnee)
         else:
             automatique, selection_commune = saisir_commune(cle_calcul('express_ref'))
             reference = saisir_reference(cle_calcul('express_ref'), automatique=automatique, selection=selection_commune)
@@ -365,6 +368,8 @@ def afficher_saisie():
                 p=candidats[0][1]
                 st.caption('Parcelle identifiée : '+libelle_parcelle(p))
             st.caption('Confirmez la référence cadastrale. La parcelle ne détermine pas à elle seule le local, sa catégorie ou ses surfaces.')
+            if selection is not None and adresse_selectionnee is None:
+                afficher_lien_street_view(url_street_view(*candidats[selection]))
             if st.button('Obtenir le résultat',type='primary',use_container_width=True,disabled=selection is None):
                 try:
                     finaliser(candidats[selection],pending['categorie'],pending['surfaces'],pending['annee'],pending.get('construction_nouvelle',False),pending.get('annee_achevement'),pending.get('historique','inconnu'),pending.get('corrections_planchonnement',{}),
@@ -389,6 +394,7 @@ else:
     st.caption(f"Local professionnel · {calcule['adresse']} · {calcule['annee']} · {calcule['categorie']}")
     bien = calcule['bien']
     st.caption(f"Parcelle {bien['section']} {bien['numero']} · {bien['commune']}")
+    afficher_lien_street_view(calcule.get('street_view') or url_street_view(calcule.get('adresse_declaree')))
     st.button('Modifier mes informations', on_click=st.session_state.pop, args=('_calcul_express', None))
     synthese = st.container()
     rapport, declaration = st.columns(2)
