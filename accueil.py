@@ -1,6 +1,5 @@
 """Choix du parcours avant toute saisie."""
 import streamlit as st
-from acces_dossiers import configuration_dossiers
 
 st.title('Simulateur de taxe foncière')
 st.write('Choisissez votre simulation.')
@@ -24,6 +23,3 @@ with c:
         if st.button('CFE – Base minimum', type='primary', use_container_width=True):
             st.switch_page('parcours_cfe.py')
 st.caption('Les parcours de taxe foncière permettent une recherche par adresse ou par parcelle cadastrale.')
-if configuration_dossiers():
-    if st.button('Dossiers clients'):
-        st.switch_page('dossiers_clients.py')

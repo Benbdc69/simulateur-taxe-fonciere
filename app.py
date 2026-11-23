@@ -4,7 +4,6 @@ import os
 import streamlit as st
 from securite import verification_mot_de_passe
 from session_calcul import bouton_nouveau_calcul
-from acces_dossiers import configuration_dossiers
 
 st.set_page_config(page_title="Simulateur TF | Axens", page_icon="🏢",layout="wide",initial_sidebar_state="collapsed")
 st.markdown("""<style>
@@ -51,8 +50,6 @@ pages=[
     st.Page('parcours_habitation.py',title='Habitation H1 / H2',icon='🏠'),
     st.Page('parcours_cfe.py', title='CFE – Base minimum', icon='🧾'),
 ]
-if configuration_dossiers():
-    pages.append(st.Page('dossiers_clients.py', title='Dossiers clients', icon='📁'))
 pg=st.navigation(pages,position='hidden')
 st.session_state['_navigation_portail'] = True
 if pg.title != 'Accueil':
@@ -60,7 +57,6 @@ if pg.title != 'Accueil':
     with retour:
         if st.button('Retour à l’accueil', icon='🏠', key='retour_accueil'):
             st.switch_page('accueil.py')
-    if pg.title != 'Dossiers clients':
-        with nouveau:
-            bouton_nouveau_calcul(dans_portail=True)
+    with nouveau:
+        bouton_nouveau_calcul(dans_portail=True)
 pg.run()

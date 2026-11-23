@@ -9,7 +9,7 @@ def cle_calcul(nom):
 def effacer_calcul():
     generation = st.session_state.get('_generation_calcul', 0) + 1
     for cle in list(st.session_state):
-        if cle not in ('_acces_valide', '_erreurs_acces', '_dossiers_identite', '_dossiers_echecs'):
+        if cle not in ('_acces_valide', '_erreurs_acces'):
             del st.session_state[cle]
     st.session_state['_generation_calcul'] = generation
 

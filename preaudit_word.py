@@ -66,7 +66,7 @@ def _table(document, titres, lignes):
                 texte.font.size = Pt(10)
 
 
-def creer_word_preaudit(evaluation, audit, *, societe='', local=''):
+def creer_word_preaudit(evaluation, audit):
     doc = Document()
     doc.core_properties.title = 'Pré-audit de taxe foncière'
     section = doc.sections[0]
@@ -87,8 +87,7 @@ def creer_word_preaudit(evaluation, audit, *, societe='', local=''):
     ventilation = audit.get('ventilation', 'inconnue')
     bilan = bilan_preaudit(evaluation, audit)
     doc.add_heading('Pré-audit de taxe foncière', level=0)
-    doc.add_paragraph(' · '.join(filter(None, (societe, local if local != evaluation['adresse'] else '',
-        evaluation['adresse'], str(evaluation['annee'])))))
+    doc.add_paragraph(f"{evaluation['adresse']} · {evaluation['annee']}")
     doc.add_paragraph(f"Catégorie {evaluation['categorie']} · Parcelle {bien.get('section', '')} {bien.get('numero', '')} · INSEE {bien.get('code_insee', '')}")
 
     doc.add_heading('Montants comparés', level=1)
@@ -114,6 +113,31 @@ def creer_word_preaudit(evaluation, audit, *, societe='', local=''):
         doc.add_paragraph(' '.join(audit['observation'].split()))
     doc.add_heading('Vérification prioritaire', level=1)
     doc.add_paragraph(bilan['suite'])
+    doc.add_heading('Cadre fiscal', level=1)
+    if evaluation['categorie'] == 'EXC1':
+        doc.add_paragraph(
+            'Les locaux présentant des caractéristiques exceptionnelles suivent les règles '
+            'd’évaluation particulières prévues à l’article 1498, III du code général des impôts (CGI).'
+        )
+    else:
+        doc.add_paragraph(
+            'La valeur locative cadastrale du local est obtenue en multipliant sa surface pondérée par le '
+            'tarif de sa catégorie dans le secteur d’évaluation. Un coefficient de localisation peut '
+            'ajuster ce tarif en fonction de la situation de la parcelle (CGI, art. 1498, II). '
+            'La pondération tient compte de l’usage et des caractéristiques des différentes surfaces '
+            '(CGI, annexe III, art. 324 Z).'
+        )
+    doc.add_paragraph(
+        'La taxe foncière sur les propriétés bâties est assise sur la valeur locative cadastrale, '
+        'sous déduction forfaitaire de 50 % (CGI, art. 1388). Les taux s’appliquent aux bases '
+        'de chaque part après les correctifs applicables.'
+    )
+    planchonnement = analyse.get('planchonnement') or {}
+    if evaluation.get('historique') == 'ancien' or planchonnement.get('applique'):
+        doc.add_paragraph(
+            'Pour les locaux éligibles, le planchonnement atténue l’écart entre la valeur locative '
+            'non révisée de 2017 et la valeur locative révisée neutralisée (CGI, art. 1518 A quinquies).'
+        )
     doc.add_paragraph('Montants indicatifs arrondis à l’euro et soumis à confirmation des données cadastrales.', style='Caption')
 
     doc.add_page_break()
@@ -143,7 +167,7 @@ def creer_word_preaudit(evaluation, audit, *, societe='', local=''):
         doc.add_paragraph(frais['note'])
     if analyse.get('missing'):
         doc.add_paragraph('Données manquantes · ' + ', '.join(analyse['missing']) + '.')
-    reserve = (analyse.get('planchonnement') or {}).get('reserve')
+    reserve = planchonnement.get('reserve')
     if reserve:
         doc.add_paragraph(reserve)
     for alerte in analyse.get('neutral_warnings') or ():
