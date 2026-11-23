@@ -2,13 +2,22 @@
 
 from decimal import Decimal, ROUND_HALF_UP
 from io import BytesIO
+from pathlib import Path
 
 from docx import Document
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 from docx.shared import Cm, Pt, RGBColor
 
 from montants import euro_arrondi
 from moteur import COEFF_SURFACES, TAXES_AVANT_2021
 
+
+LOGO_AXENS = Path(__file__).resolve().parent / 'data' / 'identite_axens' / 'logo.png'
+BLEU_AXENS = '0E3047'
+GRIS_AXENS = '5F6E6C'
+IVOIRE_AXENS = 'EEEDE3'
 
 VENTILATIONS = {
     'inconnue': 'Ventilation à confirmer',
@@ -50,34 +59,84 @@ def _nb(valeur, decimales=2):
     return '—' if valeur is None else f'{float(valeur):,.{decimales}f}'.replace(',', ' ').replace('.', ',')
 
 
-def _table(document, titres, lignes):
+def _table(document, titres, lignes, largeurs, colonnes_numeriques):
     table = document.add_table(rows=1, cols=len(titres))
-    table.style = 'Light Shading Accent 1'
-    for cellule, titre in zip(table.rows[0].cells, titres):
-        cellule.text = titre
-    for valeurs in lignes:
-        for cellule, valeur in zip(table.add_row().cells, valeurs):
-            cellule.text = str(valeur)
-    for ligne in table.rows:
-        for cellule in ligne.cells:
+    table.autofit = False
+    for colonne, largeur in zip(table.columns, largeurs):
+        colonne.width = Cm(largeur)
+    for numero, valeurs in enumerate((titres, *lignes)):
+        entete = numero == 0
+        ligne = table.rows[0] if entete else table.add_row()
+        proprietes = ligne._tr.get_or_add_trPr()
+        proprietes.append(OxmlElement('w:cantSplit'))
+        fond = IVOIRE_AXENS if numero % 2 else 'FFFFFF'
+        if entete:
+            fond = BLEU_AXENS
+            proprietes.append(OxmlElement('w:tblHeader'))
+        for index, (cellule, valeur, largeur) in enumerate(zip(ligne.cells, valeurs, largeurs)):
+            cellule.width = Cm(largeur)
+            trame = OxmlElement('w:shd')
+            trame.set(qn('w:fill'), fond)
+            cellule._tc.get_or_add_tcPr().append(trame)
             paragraphe = cellule.paragraphs[0]
-            paragraphe.paragraph_format.space_after = Pt(2)
-            for texte in paragraphe.runs:
-                texte.font.size = Pt(10)
+            paragraphe.paragraph_format.space_before = Pt(3)
+            paragraphe.paragraph_format.space_after = Pt(3)
+            paragraphe.paragraph_format.keep_with_next = entete
+            if index in colonnes_numeriques:
+                paragraphe.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            texte = paragraphe.add_run(str(valeur))
+            texte.font.size = Pt(9)
+            if entete:
+                texte.bold = True
+                texte.font.color.rgb = RGBColor.from_string('FFFFFF')
+
+
+def _mise_en_page(doc):
+    section = doc.sections[0]
+    section.page_width, section.page_height = Cm(21), Cm(29.7)
+    section.top_margin, section.bottom_margin = Cm(2.25), Cm(1.8)
+    section.left_margin, section.right_margin = Cm(2), Cm(2)
+    section.header_distance, section.footer_distance = Cm(0.9), Cm(0.8)
+
+    for nom, taille, couleur, gras, avant, apres in (
+        ('Normal', 10, BLEU_AXENS, False, 0, 6),
+        ('Title', 25, BLEU_AXENS, True, 0, 10),
+        ('Heading 1', 13, BLEU_AXENS, True, 13, 5),
+        ('Caption', 8.5, GRIS_AXENS, False, 7, 3),
+    ):
+        style = doc.styles[nom]
+        style.font.name = 'Lexend'
+        style.font.size = Pt(taille)
+        style.font.color.rgb = RGBColor.from_string(couleur)
+        style.font.bold = gras
+        polices = style.element.rPr.rFonts
+        for attribut in ('asciiTheme', 'hAnsiTheme', 'eastAsiaTheme', 'cstheme'):
+            polices.attrib.pop(qn(f'w:{attribut}'), None)
+        format_paragraphe = style.paragraph_format
+        format_paragraphe.line_spacing = 1.12
+        format_paragraphe.space_before = Pt(avant)
+        format_paragraphe.space_after = Pt(apres)
+
+    titre = doc.styles['Title']
+    bordure = titre.element.pPr.find(qn('w:pBdr'))
+    if bordure is not None:
+        titre.element.pPr.remove(bordure)
+    titre.paragraph_format.keep_with_next = True
+
+    entete = section.header.paragraphs[0]
+    entete.add_run().add_picture(str(LOGO_AXENS), width=Cm(3.15))
+    pied = section.footer.paragraphs[0]
+    pied.style = 'Caption'
+    pied.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    numero_page = OxmlElement('w:fldSimple')
+    numero_page.set(qn('w:instr'), 'PAGE')
+    pied._p.append(numero_page)
 
 
 def creer_word_preaudit(evaluation, audit):
     doc = Document()
     doc.core_properties.title = 'Pré-audit de taxe foncière'
-    section = doc.sections[0]
-    section.page_width, section.page_height = Cm(21), Cm(29.7)
-    section.top_margin, section.bottom_margin = Cm(1.8), Cm(1.8)
-    section.left_margin, section.right_margin = Cm(2), Cm(2)
-    normal = doc.styles['Normal']
-    normal.font.name, normal.font.size = 'Calibri', Pt(11)
-    normal.paragraph_format.space_after = Pt(6)
-    for nom in ('Title', 'Heading 1', 'Heading 2'):
-        doc.styles[nom].font.color.rgb = RGBColor.from_string('164C50')
+    _mise_en_page(doc)
 
     analyse = evaluation['analyse']
     resultat = analyse.get('result') or {}
@@ -97,7 +156,9 @@ def creer_word_preaudit(evaluation, audit):
         (libelle_estimation, bilan['estimation']),
         ('Écart indicatif · avis moins estimation', bilan['ecart']),
     ]
-    _table(doc, ('Montant', 'Valeur'), [(nom, euro_arrondi(val) if val is not None else '—') for nom, val in lignes])
+    _table(doc, ('Montant', 'Valeur'),
+           [(nom, euro_arrondi(val) if val is not None else '—') for nom, val in lignes],
+           (12, 5), (1,))
 
     doc.add_heading('Constats', level=1)
     surface_batie = audit.get('surface_batie')
@@ -153,13 +214,15 @@ def creer_word_preaudit(evaluation, audit):
     if ventilation == 'inconnue':
         doc.add_paragraph('Les valeurs P1 et P2 ci-dessous sont les hypothèses saisies dans le simulateur.')
     _table(doc, ('Surface', 'm² saisis', 'Pondération'),
-           [(cle, _nb(surfaces.get(cle, 0)), _nb(poids)) for cle, poids in COEFF_SURFACES.items()])
+           [(cle, _nb(surfaces.get(cle, 0)), _nb(poids)) for cle, poids in COEFF_SURFACES.items()],
+           (7, 5, 5), (1, 2))
     if resultat.get('lignes'):
         doc.add_heading('Calcul par composante', level=1)
         _table(doc, ('Taxe', 'Taux (%)', 'Neutralisation', 'Planchonnement (€)', 'Base (€)', 'Cotisation (€)'),
                [(ligne['taxe'], _nb(ligne.get('taux_pct')), _nb(ligne.get('coefficient_neutralisation'), 6),
                  _nb(ligne.get('correction_planchonnement')), _nb(ligne.get('base_taxable')), _nb(ligne.get('montant')))
-                for ligne in resultat['lignes']])
+                for ligne in resultat['lignes']],
+               (4.1, 1.85, 2.95, 3.25, 2.25, 2.6), (1, 2, 3, 4, 5))
     frais = evaluation.get('frais') or {}
     if frais.get('frais') is not None:
         doc.add_paragraph(f"Frais de gestion estimés · {_nb(frais['frais'])} €.")
@@ -178,7 +241,8 @@ def creer_word_preaudit(evaluation, audit):
         _table(doc, ('Part', 'Taux (%)', 'Année de source', 'Source'),
                [(TAXES_AVANT_2021.get(cle, cle), _nb(taux_cle.get('taux')),
                  taux_cle.get('annee_source') or '—', taux_cle.get('source') or '—')
-                for cle, taux_cle in taux.items() if taux_cle])
+                for cle, taux_cle in taux.items() if taux_cle],
+               (5.4, 2.1, 3.3, 6.2), (1, 2))
     flux = BytesIO()
     doc.save(flux)
     return flux.getvalue()
