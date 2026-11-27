@@ -11,7 +11,8 @@ from reportlab.pdfgen import canvas
 from dependances_habitation import TYPES
 from moteur import nom_commune_cadastrale
 from moteur_habitation import ENTRETIEN
-from referentiel_formulaires import MURS, PIECES_HABITATION, SURFACES_DEP_H1, TOITURES
+from referentiel_formulaires import (EQUIPEMENTS_H1, EQUIPEMENTS_H2, LIGNES_DEP_H2, MURS, PIECES_HABITATION,
+                                    PREMIERE_CASE_DEP_H2, SURFACES_DEP_H1, TOITURES)
 
 MODELES = Path(__file__).resolve().parent / 'data' / 'cerfa'
 GROUPES_6660 = {'MAG': 7, 'BUR': 3, 'DEP': 5, 'ATE': 3, 'HOT': 5,
@@ -74,8 +75,7 @@ def champs_habitation(saisie, modele):
 
     equipements = {**params, **description}
     if maison:
-        rubriques = zip(('eau', 'gaz', 'electricite', 'egout', 'chauffage'), range(2, 7))
-        champs.update({f'cac{i}': cocher(equipements.get(cle)) for cle, i in rubriques})
+        champs.update({f'cac{i}': cocher(equipements.get(cle)) for i, cle in enumerate(EQUIPEMENTS_H1, 2)})
         for i, cle in enumerate(('garages', 'caves', 'greniers'), 8):
             champs[f'b{i}'] = surface_declaree(params.get('elements_incorpores', {}).get(cle, {}).get('surface'))
         for champ, materiau in zip(range(7, 14), MURS):
@@ -88,9 +88,8 @@ def champs_habitation(saisie, modele):
         for champ, cle in zip(('b40', 'b41', 'b42'), ('maison', 'dependances', 'terrains')):
             champs[champ] = surface_declaree(description.get('emprises', {}).get(cle))
     else:
-        rubriques = ('eau', 'gaz', 'electricite', 'egout', 'chauffage', 'vide_ordures', 'ascenseur', 'escalier_service')
         champs.update({f'cac{i}': cocher(equipements.get(cle), f'/{chr(96 + i)}' if i <= 3 else '/a')
-                       for i, cle in enumerate(rubriques, 1)})
+                       for i, cle in enumerate(EQUIPEMENTS_H2, 1)})
     if description.get('partie_professionnelle'):
         declaree = description.get('declaration_6660')
         champ = 'cac1' if maison else 'cac0'
@@ -113,24 +112,21 @@ def dependances_h1(champs, dependances):
 
 
 def dependances_h2(champs, dependances):
-    lignes = {'piece': (16, 25, 34), 'garage': (43, 48, 53),
-              'cave': (58, 63, 68, 73), 'agrement': (78, 83, 88)}
-    index = {type_: 0 for type_ in lignes}
+    index = dict.fromkeys(LIGNES_DEP_H2, 0)
     excedent = []
     for ligne in dependances:
         type_ = ligne['type']
         i = index.get(type_, 0)
-        if i >= len(lignes.get(type_, ())):
+        if i >= len(LIGNES_DEP_H2.get(type_, ())):
             excedent.append(ligne)
             continue
         index[type_] += 1
-        debut = lignes[type_][i]
+        debut = LIGNES_DEP_H2[type_][i]
         designation = ligne.get('designation') or TYPES[type_]
         valeurs = (ligne.get('lot'), designation, ligne.get('batiment'),
                    ligne.get('etage_description'), surface_declaree(ligne.get('surface')))
         champs.update({f'b{debut+n}': valeur for n, valeur in enumerate(valeurs)})
-        groupe = list(lignes).index(type_)
-        case = (1, 7, 13, 21)[groupe] + i * 2
+        case = PREMIERE_CASE_DEP_H2[type_] + i * 2
         champs[f'cacb{case}'] = cocher(ligne.get('eau'))
         champs[f'cacb{case+1}'] = cocher(ligne.get('electricite'))
         if type_ == 'piece':

@@ -89,7 +89,7 @@ def saisir_commune(cle, valeurs=None):
         return False, None
     nom = st.text_input('Nom de la commune', value=st.session_state.get(cle+'_commune_query', valeurs.get('commune', '')),
         key=cle+'_nom_recherche', help='Saisissez le nom de la commune, par exemple Andrézieux-Bouthéon. Pour Paris, Lyon ou Marseille, vous choisirez ensuite l’arrondissement.')
-    departement = st.text_input('Département (facultatif)', value=st.session_state.get(cle+'_commune_departement', ''), key=cle+'_dept_recherche', help='Pour affiner une recherche en cas d’homonymes : par exemple 42, 2A ou 971. Vous pouvez laisser vide.')
+    departement = st.text_input('Département (facultatif)', value=st.session_state.get(cle+'_commune_departement', valeurs.get('departement', '')), key=cle+'_dept_recherche', help='Pour affiner une recherche en cas d’homonymes : par exemple 42, 2A ou 971. Vous pouvez laisser vide.')
     if st.button('Rechercher la commune', key=cle+'_chercher_commune'):
         st.session_state[cle+'_communes'] = []
         st.session_state.pop(cle+'_choix_commune', None)

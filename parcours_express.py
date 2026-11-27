@@ -3,6 +3,7 @@ Moteur RVLLP hérité de V13.1. Les montants incomplets ne sont jamais présent�
 comme une cotisation définitive. Les données publiques sont synchronisées à la demande.
 """
 from __future__ import annotations
+from contextlib import nullcontext
 import json
 import os
 from datetime import datetime
@@ -208,7 +209,16 @@ def afficher_saisie():
         st.stop()
     cat_codes=list(cat_map)
 
-    st.info('Préparez votre déclaration 6660-REV ou votre fiche d’évaluation cadastrale. Les surfaces se saisissent en m² réels : la pondération est automatique.')
+    importation = st.session_state.get('_cerfa_importe', {})
+    importe = importation.get('modele') == '6660-rev'
+    initial = st.session_state.get('_saisie_cerfa_pro', {}) if importe else {}
+    a_verifier = importation.get('a_verifier', []) if importe else []
+    if importe:
+        st.success('Déclaration 6660-REV importée. Confirmez les données reprises et choisissez l’année d’imposition.')
+        if a_verifier:
+            st.warning('À vérifier ou compléter · ' + ', '.join(a_verifier))
+    else:
+        st.info('Préparez votre déclaration 6660-REV ou votre fiche d’évaluation cadastrale. Les surfaces se saisissent en m² réels : la pondération est automatique.')
     with st.container(border=True):
         st.markdown('#### 1 · Identifier votre local')
         mode_recherche = st.radio('Rechercher le bien par', ['Adresse', 'Parcelle cadastrale'], horizontal=True, key=cle_calcul('express_mode'))
@@ -216,47 +226,59 @@ def afficher_saisie():
         adresse = ''
         adresse_selectionnee = None
         if mode_recherche == 'Adresse':
-            adresse, adresse_selectionnee = saisir_adresse('Adresse complète du bien', cle_calcul('express_adresse'))
+            adresse, adresse_selectionnee = saisir_adresse('Adresse complète du bien', cle_calcul('express_adresse'),
+                                                            initial.get('recherche', ''), manuelle=importe)
+            if initial.get('parcelle_declaree'):
+                st.caption('Parcelle déclarée · ' + initial['parcelle_declaree'])
             afficher_street_view_adresse(adresse, adresse_selectionnee)
         else:
-            automatique, selection_commune = saisir_commune(cle_calcul('express_ref'))
-            reference = saisir_reference(cle_calcul('express_ref'), automatique=automatique, selection=selection_commune)
+            reference_importee = initial.get('reference')
+            automatique, selection_commune = saisir_commune(cle_calcul('express_ref'), reference_importee)
+            reference = saisir_reference(cle_calcul('express_ref'), reference_importee, automatique=automatique, selection=selection_commune)
+        categorie_declaree = initial.get('categorie')
         categorie=st.selectbox('Catégorie du local', cat_codes,key=cle_calcul('express_categorie'),
-            index=None, placeholder='Sélectionnez la catégorie figurant sur votre document',
+            index=cat_codes.index(categorie_declaree) if categorie_declaree in cat_map else None,
+            placeholder='Sélectionnez la catégorie figurant sur votre document',
             format_func=lambda code: f'{code} — {libelle_categorie(code, cat_map)}',
             help='Reprenez le code fiscal de la déclaration 6660-REV ou de la fiche cadastrale (ex. BUR2).')
         if st.button('Consulter le guide des catégories', type='tertiary', key=cle_calcul('express_ouvrir_guide')):
             afficher_guide_categories(cat_map, categorie)
         st.markdown('#### 2 · Répartir les surfaces')
-        mesures = afficher_mesures(mode_recherche, reference, adresse, adresse_selectionnee) or {}
-        st.caption('Chaque surface doit apparaître une seule fois. Ne saisissez pas une surface déjà pondérée. Laissez 0 pour les rubriques qui ne concernent pas votre bien.')
-        aides_surfaces={
-            'P1':'Surface des parties principales utilisées pour l’activité. Reprenez la rubrique P1 de la déclaration, sans y ajouter les surfaces P2, P3 ou les parkings.',
-            'P2':'Parties secondaires couvertes, de moindre utilité pour l’activité, selon votre déclaration (par exemple certaines réserves). Ne les comptez pas aussi en P1.',
-            'P3':'Parties secondaires non couvertes rattachées au local, selon votre déclaration. Les stationnements sont à renseigner en PK1 ou PK2.',
-            'PK1':'Surface des emplacements de stationnement couverts. Indiquez des m², et non le nombre de places.',
-            'PK2':'Surface des emplacements de stationnement non couverts. Indiquez des m², et non le nombre de places.',
-        }
-        surfaces={}
-        labels={'P1':'P1 · Principale','P2':'P2 · Secondaire couverte',
-                'P3':'P3 · Secondaire non couverte','PK1':'PK1 · Stationnement couvert',
-                'PK2':'PK2 · Stationnement non couvert'}
-        cols=st.columns(3)
-        for i,(k,v) in enumerate(labels.items()):
-            with cols[i%3]:
-                surfaces[k]=st.number_input(v,min_value=0.0,max_value=1_000_000.0,step=1.0,key=cle_calcul('express_'+k),help=aides_surfaces[k])
-        with st.expander('Comment les surfaces sont-elles prises en compte ?'):
-            st.write('Exemple : si votre déclaration indique 100 m² en P1 et 20 m² en P2, saisissez 100 et 20, sans réduire vous-même la surface secondaire.')
-            st.write('Pondérations appliquées : '+', '.join(f'{k} × {v:g}' for k,v in COEFF_SURFACES.items())+'. Le classement de chaque surface reste celui de votre déclaration.')
-            st.caption(f"Surface pondérée issue de votre saisie : {sum(surfaces[k]*v for k,v in COEFF_SURFACES.items()):,.2f} m²".replace(',', ' '))
+        section_surfaces = st.expander(
+            'Vérifier les surfaces importées', expanded=any(champ.startswith('surface') for champ in a_verifier)
+        ) if importe else nullcontext()
+        with section_surfaces:
+            mesures = afficher_mesures(mode_recherche, reference, adresse, adresse_selectionnee) or {}
+            st.caption('Chaque surface doit apparaître une seule fois. Ne saisissez pas une surface déjà pondérée. Laissez 0 pour les rubriques qui ne concernent pas votre bien.')
+            aides_surfaces={
+                'P1':'Surface des parties principales utilisées pour l’activité. Reprenez la rubrique P1 de la déclaration, sans y ajouter les surfaces P2, P3 ou les parkings.',
+                'P2':'Parties secondaires couvertes, de moindre utilité pour l’activité, selon votre déclaration (par exemple certaines réserves). Ne les comptez pas aussi en P1.',
+                'P3':'Parties secondaires non couvertes rattachées au local, selon votre déclaration. Les stationnements sont à renseigner en PK1 ou PK2.',
+                'PK1':'Surface des emplacements de stationnement couverts. Indiquez des m², et non le nombre de places.',
+                'PK2':'Surface des emplacements de stationnement non couverts. Indiquez des m², et non le nombre de places.',
+            }
+            surfaces={}
+            labels={'P1':'P1 · Principale','P2':'P2 · Secondaire couverte',
+                    'P3':'P3 · Secondaire non couverte','PK1':'PK1 · Stationnement couvert',
+                    'PK2':'PK2 · Stationnement non couvert'}
+            cols=st.columns(3)
+            for i,(k,v) in enumerate(labels.items()):
+                with cols[i%3]:
+                    surfaces[k]=st.number_input(v,min_value=0.0,max_value=1_000_000.0,step=1.0,value=float(initial.get('surfaces', {}).get(k, 0)),key=cle_calcul('express_'+k),help=aides_surfaces[k])
+            with st.expander('Comment les surfaces sont-elles prises en compte ?'):
+                st.write('Exemple : si votre déclaration indique 100 m² en P1 et 20 m² en P2, saisissez 100 et 20, sans réduire vous-même la surface secondaire.')
+                st.write('Pondérations appliquées : '+', '.join(f'{k} × {v:g}' for k,v in COEFF_SURFACES.items())+'. Le classement de chaque surface reste celui de votre déclaration.')
+                st.caption(f"Surface pondérée issue de votre saisie : {sum(surfaces[k]*v for k,v in COEFF_SURFACES.items()):,.2f} m²".replace(',', ' '))
         st.markdown('#### 3 · Préciser l’année et l’historique')
         st.caption('L’année est celle de l’avis que vous souhaitez estimer. Les informations historiques permettent de préciser les correctifs applicables.')
         annee=int(st.number_input('Année d’imposition',key=cle_calcul('express_annee'), min_value=2017, max_value=2026, value=2026, step=1, format='%d', help='Choisissez l’année d’imposition de l’avis, pas l’année de déclaration ou d’achat. Le moteur couvre 2017 à 2026 ; les règles à partir de 2027 ne sont pas encore intégrées.'))
-        construction_nouvelle=st.checkbox('Construction nouvelle, reconstruction ou addition de construction (hors habitation)', value=False,key=cle_calcul('express_neuf'),
+        construction_nouvelle=st.checkbox('Construction nouvelle, reconstruction ou addition de construction (hors habitation)', value=initial.get('construction_nouvelle', False),key=cle_calcul('express_neuf'),
             help='Cochez uniquement pour une construction nouvelle, une reconstruction ou une addition de construction, pas pour un simple achat ou changement de locataire. Exonération temporaire de 40 % de la part communale et des taxes additionnelles éligibles (GEMAPI, TSE et syndicats sans fiscalité propre), sous conditions.')
         annee_achevement=None
         if construction_nouvelle:
-            annee_achevement=st.number_input('Année d’achèvement des travaux',key=cle_calcul('express_achevement'),min_value=1900,max_value=annee, value=max(1900,annee-1),step=1,help='Année où les travaux permettent l’utilisation effective du bien. Ce n’est pas nécessairement l’année du permis, de l’achat ou de la déclaration fiscale.')
+            achevement_importe = initial.get('annee_achevement')
+            achevement_initial = (achevement_importe if achevement_importe and achevement_importe <= annee else None) if importe else annee - 1
+            annee_achevement=st.number_input('Année d’achèvement des travaux',key=cle_calcul('express_achevement'),min_value=1900,max_value=annee, value=achevement_initial,step=1,help='Année où les travaux permettent l’utilisation effective du bien. Ce n’est pas nécessairement l’année du permis, de l’achat ou de la déclaration fiscale.')
             st.caption('Sous réserve de déclaration dans les 90 jours : 40 % pour la commune, les syndicats sans fiscalité propre, la TSE et la GEMAPI ; pas pour l’EPCI à fiscalité propre ni la TEOM.')
         historique = st.selectbox(
             'Le local existait-il comme local professionnel au 1er janvier 2017 ?',key=cle_calcul('express_historique'),
@@ -305,6 +327,8 @@ def afficher_saisie():
             st.error('Indiquez une adresse complète pour localiser le bien.')
         elif categorie is None:
             st.error('Sélectionnez la catégorie fiscale figurant sur votre déclaration 6660-REV ou votre fiche cadastrale.')
+        elif construction_nouvelle and annee_achevement is None:
+            st.error('Renseignez l’année d’achèvement des travaux pour une construction nouvelle.')
         elif not any(surfaces.values()) and not mesures.get('surface_batie'):
             st.error('Renseignez au moins une surface.')
         else:
@@ -351,7 +375,7 @@ def afficher_saisie():
                                     break
                             if not cand:
                                 st.error('Aucune parcelle identifiable à cette adresse. Essayez une adresse plus précise.')
-                            elif len(cand)==1 and cand[0][1].get('recherche')=='Point dans la parcelle':
+                            elif len(cand)==1 and cand[0][1].get('recherche')=='Point dans la parcelle' and not importe:
                                 finaliser(cand[0], categorie, surfaces, annee, construction_nouvelle,
                                           annee_achevement, historique, corrections_validees,
                                           mesures=mesures, **donnees_historiques)

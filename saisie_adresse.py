@@ -11,8 +11,9 @@ def suggestions_adresses(recherche):
     return [(r['libelle'], r) for r in adresses(texte)]
 
 
-def saisir_adresse(label, cle, valeur=''):
-    mode = st.radio('Saisie de l’adresse', ['Suggestions pendant la saisie', 'Saisie manuelle'], horizontal=True, key=cle+'_mode')
+def saisir_adresse(label, cle, valeur='', *, manuelle=False):
+    mode = st.radio('Saisie de l’adresse', ['Suggestions pendant la saisie', 'Saisie manuelle'],
+                    index=int(manuelle), horizontal=True, key=cle+'_mode')
     if mode == 'Saisie manuelle':
         return st.text_input(label, value=valeur, key=cle+'_manuelle', placeholder='Numéro, voie, code postal et commune'), None
     erreur = cle+'_erreur'

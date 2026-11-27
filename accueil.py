@@ -3,6 +3,9 @@ from pathlib import Path
 
 import streamlit as st
 
+from import_cerfa import TAILLE_MAX_CERFA, lire_cerfa
+from session_calcul import cle_calcul, effacer_calcul
+
 SUPPORT_COMMERCIAL = Path(__file__).resolve().parent / 'data' / 'documents' / 'offre-axens-pre-audit-taxe-fonciere.pdf'
 
 st.title('Simulateur de taxe foncière')
@@ -39,4 +42,23 @@ with d:
             type='primary',
             use_container_width=True,
         )
+
+with st.expander('Importer une déclaration déjà remplie'):
+    st.caption('Ouvrez une nouvelle simulation à partir d’un H1, H2 ou 6660-REV rempli dans le PDF interactif. Vérifiez ensuite les données reprises.')
+    fichier = st.file_uploader('Déclaration H1, H2 ou 6660-REV', type='pdf', key=cle_calcul('import_cerfa'))
+    if fichier is not None and st.button('Préremplir une simulation', type='primary'):
+        try:
+            if fichier.size > TAILLE_MAX_CERFA:
+                raise ValueError('Choisissez un PDF de 10 Mo maximum.')
+            modele, saisie, a_verifier = lire_cerfa(fichier.getvalue())
+        except ValueError as exc:
+            st.error(str(exc))
+        else:
+            effacer_calcul()
+            st.session_state['_cerfa_importe'] = {'modele': modele, 'a_verifier': a_verifier}
+            if modele == '6660-rev':
+                st.session_state['_saisie_cerfa_pro'] = saisie
+                st.switch_page('parcours_express.py')
+            st.session_state['hab_saisie'] = saisie
+            st.switch_page('parcours_habitation.py')
 st.caption('Les parcours de taxe foncière permettent une recherche par adresse ou par parcelle cadastrale.')

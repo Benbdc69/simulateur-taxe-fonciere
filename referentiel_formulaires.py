@@ -6,6 +6,12 @@ SURFACES_DEP_H1 = {'garages':'Garages', 'caves':'Caves, celliers, buanderies et 
 MURS = ['Pierre', 'Moellon, meulière', 'Béton', 'Brique', 'Agglomérés', 'Bois', 'Autres matériaux']
 TOITURES = ['Tuiles', 'Ardoises', 'Zinc ou aluminium', 'Béton', 'Autres matériaux']
 
+EQUIPEMENTS_H1 = ('eau', 'gaz', 'electricite', 'egout', 'chauffage')
+EQUIPEMENTS_H2 = (*EQUIPEMENTS_H1, 'vide_ordures', 'ascenseur', 'escalier_service')
+LIGNES_DEP_H2 = {'piece': (16, 25, 34), 'garage': (43, 48, 53),
+                 'cave': (58, 63, 68, 73), 'agrement': (78, 83, 88)}
+PREMIERE_CASE_DEP_H2 = dict(zip(LIGNES_DEP_H2, (1, 7, 13, 21)))
+
 
 PIECES_HABITATION = {
     'reception': 'Salles à manger et pièces de réception',
